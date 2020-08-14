@@ -1,6 +1,6 @@
 '''The base MCTS agent'''
+from abc import abstractmethod
 from . import BaseAgent
-
 
 class BaseMCTSAgent(BaseAgent):
     """The Base-MCTS Agent."""
@@ -16,18 +16,15 @@ class BaseMCTSAgent(BaseAgent):
             simulation_result = self.rollout(leaf)
             self.backpropagate(leaf, simulation_result)
 
-        return self.best_child(root)
-
-    def episode_end(self, reward):
-        pass
+        return self.best_child(obs)
 
     # function for node traversal
     def traverse(self, node):
         while self.fully_expanded(node):
-            node = self.best_uct(node)
+            node = self.select_child(node)
 
         # in case no children are present / node is terminal
-        return self.pick_univisted(node) or node
+        return self.expand_node(node) or node
 
     # function for the result of the simulation
     def rollout(self, node):
@@ -37,36 +34,52 @@ class BaseMCTSAgent(BaseAgent):
 
     # function for backpropagation
     def backpropagate(self, node, result):
-        if self.is_root(node): return
+        if self.is_root(node):
+            return
         node.stats = self.update_stats(node, result)
         self.backpropagate(node.parent)
 
-    # function for selecting the best child
-    # node with highest number of visits
-    def best_child(self, node):
-        #pick child with highest number of visits
-        pass
-
+    @abstractmethod
     def fully_expanded(self, node):
+        # check if fully expanded
         raise NotImplementedError()
 
-    def best_uct(self, node):
+    @abstractmethod
+    def select_child(self, node):
+        # select child for traversing
         raise NotImplementedError()
 
-    def pick_univisted_child(self, node):
+    @abstractmethod
+    def expand_node(self, node):
+        # pick unvisited child
         raise NotImplementedError()
 
+    @abstractmethod
     def non_terminal(self, node):
+        # check if node is terminal
         raise NotImplementedError()
 
+    @abstractmethod
     def rollout_policy(self, node):
+        # get next node based on rollout policy
         raise NotImplementedError()
 
+    @abstractmethod
     def result(self, node):
+        # get reward from terminal node
         raise NotImplementedError()
 
+    @abstractmethod
     def is_root(self, node):
+        # check if node is root
         raise NotImplementedError()
 
-    def update_stats(self, node):
+    @abstractmethod
+    def update_stats(self, node, result):
+        # get updated node stats
+        raise NotImplementedError()
+
+    @abstractmethod
+    def best_child(self, node):
+        # pick child with highest number of visits
         raise NotImplementedError()
