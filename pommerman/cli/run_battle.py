@@ -22,10 +22,9 @@ import time
 import argparse
 import numpy as np
 
-from .. import helpers
-from .. import make
+from pommerman import helpers
+from pommerman import make
 from pommerman import utility
-
 
 def run(args, num_times=1, seed=None):
     '''Wrapper to help start the game'''

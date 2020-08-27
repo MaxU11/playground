@@ -1,26 +1,28 @@
 '''The base MCTS agent'''
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from . import BaseAgent
 
-class BaseMCTSAgent(BaseAgent):
+class BaseMCTSAgent(ABC, BaseAgent):
     """The Base-MCTS Agent."""
 
     def __init__(self, *args, **kwargs):
         super(BaseMCTSAgent, self).__init__(*args, **kwargs)
-        # iterations the agent is allowed to make for each action
-        self.maxIterations = 1000
 
     def act(self, obs, action_space):
-        for i in range(self.maxIterations):
-            leaf = self.traverse(obs)
-            simulation_result = self.rollout(leaf)
+        print("globals: ", vars(self))
+        print("obs: ", obs)
+        print("action_space: ", action_space)
+        leaf = self.init_root(obs, action_space)
+        while self.is_search_active():
+            leaf = self.traverse(leaf)
+            simulation_result, leaf = self.rollout(leaf)
             self.backpropagate(leaf, simulation_result)
 
         return self.best_child(obs)
 
     # function for node traversal
     def traverse(self, node):
-        while self.fully_expanded(node):
+        while node.fully_expanded():
             node = self.select_child(node)
 
         # in case no children are present / node is terminal
@@ -34,14 +36,19 @@ class BaseMCTSAgent(BaseAgent):
 
     # function for backpropagation
     def backpropagate(self, node, result):
-        if self.is_root(node):
+        if node.is_root():
             return
         node.stats = self.update_stats(node, result)
         self.backpropagate(node.parent)
 
     @abstractmethod
-    def fully_expanded(self, node):
-        # check if fully expanded
+    def init_root(self, obs, action_space):
+        # initialize root node
+        return Node(obs, action_space)
+
+    @abstractmethod
+    def is_search_active(self):
+        # is search active?
         raise NotImplementedError()
 
     @abstractmethod
@@ -70,11 +77,6 @@ class BaseMCTSAgent(BaseAgent):
         raise NotImplementedError()
 
     @abstractmethod
-    def is_root(self, node):
-        # check if node is root
-        raise NotImplementedError()
-
-    @abstractmethod
     def update_stats(self, node, result):
         # get updated node stats
         raise NotImplementedError()
@@ -83,3 +85,34 @@ class BaseMCTSAgent(BaseAgent):
     def best_child(self, node):
         # pick child with highest number of visits
         raise NotImplementedError()
+
+
+    def episode_end(self, reward):
+        """This is called at the end of the episode to let the agent know that
+        the episode has ended and what is the reward.
+
+        Args:
+          reward: The single reward scalar to this agent.
+        """
+        pass
+
+class Node():
+
+    def __init__(self, game_state, action_space):
+        self.game_state = game_state
+        self.parent = None
+        self.children = {}
+        self.action_space = action_space
+        self.unseen_actions = self.action_space
+        self.state = None
+
+    def is_root(self):
+        return self.parent == None
+
+    def fully_expanded(self, node):
+        return len(self.children) == len(self.action_space)
+
+    def expand(self, action):
+
+        self.children[action] = node
+        self.unseen_actions.remove(action)
