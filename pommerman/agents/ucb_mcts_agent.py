@@ -1,9 +1,13 @@
 '''The UCB MCTS agent'''
-from .base_mcts_agent import BaseMCTSAgent
-from .base_mcts_agent import Node
-from collections import defaultdict
 import math
 import random
+
+from copy import deepcopy
+from collections import defaultdict
+from .base_mcts_agent import BaseMCTSAgent
+from .base_mcts_agent import Node
+from .env_simulator import Env_simulator
+from .. import constants
 
 class UBC_MCTSAgent(BaseMCTSAgent):
     """The Base-MCTS Agent."""
@@ -17,11 +21,22 @@ class UBC_MCTSAgent(BaseMCTSAgent):
         self.Q = defaultdict(int)  # total reward of each node
         self.N = defaultdict(int)  # total visit count for each node
         self.C = 10 # exploration weight
+        self.discount_factor = 0.999
 
-
-    def init_root(self, obs, action_space):
+    def get_root(self, obs, action_space):
         self.iterations = 0
-        return super(UBC_MCTSAgent, self).init_root(obs, action_space)
+        if (self.root == None):
+            game_state = Env_simulator.get_initial_game_state(obs, 10 + self.agent_id)
+            self.root = Node(game_state, action_space, 10 + self.agent_id, self.enemies[0].value, None)
+        else:
+            actions = Env_simulator.update(self.root.game_state, obs)
+            child = self.root.get_child(actions)
+            if child != None and Env_simulator.boards_equal(self.root.game_state, child.game_state, False):
+                self.root = child
+            else:
+                self.root = Node(self.root.game_state, action_space, 10 + self.agent_id, self.enemies[0].value, None)
+
+        return self.root
 
     def is_search_active(self):
         self.iterations += 1
@@ -39,25 +54,58 @@ class UBC_MCTSAgent(BaseMCTSAgent):
 
     def expand_node(self, node):
         # pick unvisited child
+        if node.agent_id == 10 + self.agent_id:
+            action = random.choice(node.unseen_actions)
+            node = node.expand(action, node.game_state)
+
+        game_state = deepcopy(node.game_state)
         action = random.choice(node.unseen_actions)
-        node.expand(action)
+        Env_simulator.act(game_state, {node.enemy_id: node.action, node.agent_id: action})
+        node.expand(action, game_state)
 
     def non_terminal(self, node):
         # check if node is terminal
-        raise NotImplementedError()
+        return not node.game_state.done
 
     def rollout_policy(self, node):
         # get next node based on rollout policy
-        raise NotImplementedError()
+        actions = {}
+        if node.agent_id == 10 + self.agent_id:
+            actions[10 + self.agent_id] = node.action
+        else:
+            actions[10 + self.agent_id] = random.choice(range(node.action_space.n))
+        actions[self.enemies[0].value] = random.choice(range(node.action_space.n))
+
+        game_state = deepcopy(node.game_state)
+        Env_simulator.act(game_state, actions)
+        return Node(game_state, node.action_space, 10 + self.agent_id, self.enemies[0], None)
 
     def result(self, node):
         # get reward from terminal node
-        raise NotImplementedError()
+        reward = 0
+        for a in node.game_state.agents:
+            if a.agent_id == 10 + self.agent_id:
+                if a.is_alive: reward += 500
+                else: reward += 0
+            else:
+                if a.is_alive: reward += 0
+                else: reward += 500
+        return reward
 
     def update_stats(self, node, result):
         # get updated node stats
-        raise NotImplementedError()
+        self.N[node] += 1
+        if node.agent_id == 10 + self.agent_id:
+            self.Q[node] += result
+        else:
+            self.Q[node] += 1000 - result
+        result *= self.discount_factor
 
     def best_child(self, node):
         # pick child with highest number of visits
-        raise NotImplementedError()
+        def score(child):
+            if self.N[child] == 0:
+                return float("-inf")
+            return self.Q[child] / self.N[child]
+
+        return max(node.children, key=score)

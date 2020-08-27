@@ -9,10 +9,7 @@ class BaseMCTSAgent(ABC, BaseAgent):
         super(BaseMCTSAgent, self).__init__(*args, **kwargs)
 
     def act(self, obs, action_space):
-        print("globals: ", vars(self))
-        print("obs: ", obs)
-        print("action_space: ", action_space)
-        leaf = self.init_root(obs, action_space)
+        leaf = self.get_root(obs, action_space)
         while self.is_search_active():
             leaf = self.traverse(leaf)
             simulation_result, leaf = self.rollout(leaf)
@@ -30,21 +27,23 @@ class BaseMCTSAgent(ABC, BaseAgent):
 
     # function for the result of the simulation
     def rollout(self, node):
+        leaf = node
         while self.non_terminal(node):
             node = self.rollout_policy(node)
-        return self.result(node)
+        if len(leaf.children) > 0: leaf = node
+        return self.result(node), leaf
 
     # function for backpropagation
     def backpropagate(self, node, result):
         if node.is_root():
             return
         node.stats = self.update_stats(node, result)
-        self.backpropagate(node.parent)
+        self.backpropagate(node.parent, result)
 
     @abstractmethod
-    def init_root(self, obs, action_space):
+    def get_root(self, obs, action_space):
         # initialize root node
-        return Node(obs, action_space)
+        raise NotImplementedError()
 
     @abstractmethod
     def is_search_active(self):
@@ -98,21 +97,31 @@ class BaseMCTSAgent(ABC, BaseAgent):
 
 class Node():
 
-    def __init__(self, game_state, action_space):
+    def __init__(self, game_state, action_space, agent_id, enemy_id, action):
         self.game_state = game_state
         self.parent = None
         self.children = {}
         self.action_space = action_space
-        self.unseen_actions = self.action_space
+        self.unseen_actions = list(range(self.action_space.n))
         self.state = None
+        self.agent_id = agent_id
+        self.enemy_id = enemy_id
+        self.action = action
 
     def is_root(self):
         return self.parent == None
 
-    def fully_expanded(self, node):
-        return len(self.children) == len(self.action_space)
+    def fully_expanded(self):
+        return len(self.unseen_actions) <= 0
 
-    def expand(self, action):
-
-        self.children[action] = node
+    def expand(self, action, game_state):
+        child = Node(game_state, self.action_space, self.enemy_id, self.agent_id, action)
+        self.children[action] = child
         self.unseen_actions.remove(action)
+        return child
+
+    def get_child(self, actions):
+        child = self.children[actions[self.agent_id]]
+        if child is not None:
+            child = child.children[actions[self.enemy_id]]
+        return child
