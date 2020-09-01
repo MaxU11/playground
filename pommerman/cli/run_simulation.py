@@ -4,7 +4,8 @@ import argparse
 def main():
     '''CLI entry pointed used to bootstrap a battle'''
     simple_agent = 'test::agents.UBC_MCTSAgent'
-    player_agent = 'playerblock::arrows'
+    #player_agent = 'player::arrows'
+    player_agent = 'test::agents.SimpleAgent'
     #docker_agent = 'docker::pommerman/simple-agent'
 
     parser = argparse.ArgumentParser(description='Playground Flags.')
