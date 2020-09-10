@@ -3,7 +3,7 @@ import argparse
 
 def main():
     '''CLI entry pointed used to bootstrap a battle'''
-    simple_agent = 'test::agents.UBC_MCTSAgent'
+    simple_agent = 'test::agents.UBC_RND_MCTSAgent'
     #player_agent = 'player::arrows'
     player_agent = 'test::agents.SimpleAgent'
     #docker_agent = 'docker::pommerman/simple-agent'

@@ -8,4 +8,5 @@ from .random_agent import RandomAgent
 from .simple_agent import SimpleAgent
 from .tensorforce_agent import TensorForceAgent
 
-from .ucb_mcts_agent import UBC_MCTSAgent
+from .ucb_rnd_mcts_agent import UBC_RND_MCTSAgent
+from .ucb_rnd_limit_mcts_agent import UBC_RND_Limit_MCTSAgent

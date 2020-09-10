@@ -21,6 +21,8 @@ class AbstractMCTSAgent(ABC, BaseAgent):
 
         self.search_finished()
 
+        a = self.best_child(root)
+        print(f'selected action: {a}')
         return self.best_child(root)
 
     # function for node traversal
@@ -159,6 +161,8 @@ class BaseMCTSAgent(AbstractMCTSAgent):
                 child.game_state = self.root.game_state
                 self.root = child
             else:
+                #print(f'ROOT RESET!\n{actions}\n')
+                #print(f'{child}\n{self.root.game_state.board}\n{child.game_state.board}')
                 self.root = Node(self.root.game_state, action_space, self.agent_id, self.enemies[0].value - 10, None)
 
         self.root_changed(self.root)
@@ -236,21 +240,40 @@ class BaseMCTSAgent(AbstractMCTSAgent):
 
         map_id = ''
         info = "{0:0=3d}\n".format(step_count)
+        info += f'root {self.get_agent_map_info(self.root)}\n'
         info += np.array_str(self.root.game_state.board) + '\n'
-        info += self.get_map_info(map_id, self.root)
+        i, b = self.get_map_info(map_id, self.root, '')
+        info += i + '\n' + b
         return info
 
-    def get_map_info(self, map_id, node):
+    def get_map_info(self, map_id, node, intend):
         info = ''
-        for my_action in node.children:
-            tmp = node.children[my_action]
-            for enemy_action in tmp.children:
-                child_id = f'{map_id}-{my_action}{enemy_action}'
-                child = tmp.children[enemy_action]
-                info += f'id: {child_id}, reward: {-child.reward} (parent: {tmp.reward})\n'
-                info += np.array_str(child.game_state.board) + '\n'
-                info += self.get_map_info(child_id, child)
-        return info
+        board_info = ''
+        child_id = map_id + '-'
+
+        child_actions = node.children.keys()
+        for my_action in range(6):
+            if my_action in child_actions:
+                my_child = node.children[my_action]
+                sub_child_id = f'{child_id}{my_action}'
+                info += f'{intend}id: {sub_child_id}, {self.get_agent_map_info(my_child)}\n'
+
+                enemy_child_actions = my_child.children.keys()
+                for enemy_action in range(6):
+                    if enemy_action in enemy_child_actions:
+                        enemy_child = my_child.children[enemy_action]
+                        subsub_child_id = f'{sub_child_id}{enemy_action}'
+                        info += f'{intend}  id: {subsub_child_id}, {self.get_agent_map_info(enemy_child)}\n'
+                        board_info += f'id: {subsub_child_id}\n{np.array_str(enemy_child.game_state.board)}\n'
+                        i, b = self.get_map_info(subsub_child_id, enemy_child, intend + '    ')
+                        info += i
+                        board_info += b
+        return info, board_info
+
+    @abstractmethod
+    def get_agent_map_info(self, node):
+        # return action from my agent
+        return ''
 
     def save_tree_info(self, path, root):
         info = self.get_tree_info(root)

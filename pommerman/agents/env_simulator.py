@@ -81,15 +81,16 @@ class Env_simulator:
 
         Env_simulator.act(game_state, actions)
 
-        print("board: ", game_state.board)
-        print("agent1: ", game_state.agents[0].ammo, game_state.agents[0].blast_strength, game_state.agents[0].can_kick)
-        print("agent2: ", game_state.agents[1].ammo, game_state.agents[1].blast_strength, game_state.agents[1].can_kick)
+        # print("board: \n", game_state.board)
+        # print("agent1: ", game_state.agents[0].ammo, game_state.agents[0].blast_strength, game_state.agents[0].can_kick)
+        # print("agent2: ", game_state.agents[1].ammo, game_state.agents[1].blast_strength, game_state.agents[1].can_kick)
 
         reset = False
 
         # compare boards
         if not Env_simulator.boards_equal(game_state.board, new_board, True):
             a1bomb, a2bomb, kick, flame = Env_simulator.get_boards_differences(game_state.board, new_board)
+            print(a1bomb, a2bomb, kick, flame)
             if a1bomb and my_id is not 0:
                 game_state.agents[0].ammo += 1
             elif a2bomb and my_id is not 1:
