@@ -63,12 +63,16 @@ class UBC_RND_MCTSAgent(BaseMCTSAgent):
         return random.choice(node.unseen_actions)
 
     def get_my_rollout_action(self, node):
+        if len(node.unseen_actions) <= 0:
+            print(node.game_state.board)
         # return action from my agent
-        return random.choice(range(node.action_space.n))
+        return random.choice(node.unseen_actions)
 
     def get_enemy_rollout_action(self, node):
+        if len(node.unseen_actions) <= 0:
+            print(node.game_state.board)
         # return action from my agent
-        return random.choice(range(node.action_space.n))
+        return random.choice(node.unseen_actions)
 
     def result(self, node):
         # get reward from terminal node

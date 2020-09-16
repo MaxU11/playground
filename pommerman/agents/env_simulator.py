@@ -148,6 +148,14 @@ class Env_simulator:
             return pos
 
     @staticmethod
+    def is_valid_action(board, flames, bombs, agent, action):
+        if action is constants.Action.Bomb.value:
+            return agent.ammo > 0
+        else:
+            a_pos = Env_simulator.get_position(board, agent.agent_id + 10, True)
+            return Env_simulator.is_valid_direction(board, flames, bombs, a_pos, action, agent.can_kick)
+
+    @staticmethod
     def boards_equal(board1, board2, ignore_items):
         if ignore_items:
             board1 = copy.deepcopy(board1)
@@ -192,6 +200,69 @@ class Env_simulator:
                 raise ValueError('Invalid difference between maps.')
 
         return a1bomb, a2bomb, kick, flame
+
+    @staticmethod
+    def is_valid_direction(board, flames, bombs, position, direction, can_kick):
+        '''Determins if a move is in a valid direction'''
+        row, col = position
+        invalid_values = [item.value for item in \
+                         [constants.Item.Rigid, constants.Item.Wood]]
+        if not can_kick:
+            invalid_values.append(constants.Item.Bomb.value)
+
+        invalid_positions = []
+        for flame in flames:
+            if flame.life > 0:
+                invalid_positions.append(flame.position)
+
+        exploded = True
+        exp_bombs = []
+        while exploded:
+            exploded = False
+            for bomb in bombs:
+                if bomb not in exp_bombs and (bomb.life is 1 or bomb.position in invalid_positions):
+                    Env_simulator._get_bomb_fire_positions(board, bomb, invalid_positions)
+                    exp_bombs.append(bomb)
+                    exploded = True
+
+        if constants.Action(direction) == constants.Action.Stop:
+            return True
+
+        if constants.Action(direction) == constants.Action.Up:
+            return row - 1 >= 0 and board[row - 1][col] not in invalid_values and (row - 1, col) not in invalid_positions
+
+        if constants.Action(direction) == constants.Action.Down:
+            return row + 1 < len(board) and board[row + 1][col] not in invalid_values and (row + 1, col) not in invalid_positions
+
+        if constants.Action(direction) == constants.Action.Left:
+            return col - 1 >= 0 and board[row][col - 1] not in invalid_values and (row, col - 1) not in invalid_positions
+
+        if constants.Action(direction) == constants.Action.Right:
+            return col + 1 < len(board[0]) and board[row][col + 1] not in invalid_values and (row, col + 1) not in invalid_positions
+
+        raise constants.InvalidAction("We did not receive a valid direction: ", direction)
+
+    @staticmethod
+    def _get_bomb_fire_positions(board, bomb, fire_pos):
+        fire_pos.append(bomb.position)
+        Env_simulator._get_fire_positions_in_direction(board, bomb.position[0], bomb.position[1], bomb.blast_strength-1,  0,  1, fire_pos) # right
+        Env_simulator._get_fire_positions_in_direction(board, bomb.position[0], bomb.position[1], bomb.blast_strength-1,  0, -1, fire_pos) # left
+        Env_simulator._get_fire_positions_in_direction(board, bomb.position[0], bomb.position[1], bomb.blast_strength-1, -1,  0, fire_pos) # up
+        Env_simulator._get_fire_positions_in_direction(board, bomb.position[0], bomb.position[1], bomb.blast_strength-1,  1,  0, fire_pos) # down
+
+    @staticmethod
+    def _get_fire_positions_in_direction(board, x, y, strength, x_dir, y_dir, fire_pos):
+        if strength <= 0 or not utility.position_on_board(board, (x, y)):
+            return
+        next_x = x + x_dir
+        next_y = y + y_dir
+        if not utility.position_on_board(board, (next_x, next_y)):
+            return
+        if utility.position_in_items(board, (next_x, next_y), [constants.Item.Rigid, constants.Item.Wood]):
+            return
+
+        fire_pos.append((next_x, next_y))
+        Env_simulator._get_fire_positions_in_direction(board, next_x, next_y, strength-1, x_dir, y_dir, fire_pos)
 
 class Game_state:
     pass

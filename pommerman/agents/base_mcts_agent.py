@@ -99,6 +99,9 @@ class AbstractMCTSAgent(ABC, BaseAgent):
         # called when search has finished
         pass
 
+    def create_node(self, game_state, action_space, agent_id, enemy_id, action):
+        # create the node
+        return Node(game_state, action_space, agent_id, enemy_id, action)
 
     def episode_end(self, reward):
         """This is called at the end of the episode to let the agent know that
@@ -111,12 +114,15 @@ class AbstractMCTSAgent(ABC, BaseAgent):
 
 class Node():
 
-    def __init__(self, game_state, action_space, agent_id, enemy_id, action):
+    def __init__(self, game_state, action_space, agent_id, enemy_id, action, valid_actions = None):
         self.game_state = game_state
         self.parent = None
         self.children = {}
         self.action_space = action_space
-        self.unseen_actions = list(range(self.action_space.n))
+        if valid_actions is None:
+            self.unseen_actions = list(range(self.action_space.n))
+        else:
+            self.unseen_actions = valid_actions
         self.agent_id = agent_id
         self.enemy_id = enemy_id
         self.action = action
@@ -128,8 +134,8 @@ class Node():
     def fully_expanded(self):
         return len(self.unseen_actions) <= 0
 
-    def expand(self, action, game_state):
-        child = Node(game_state, self.action_space, self.enemy_id, self.agent_id, action)
+    def expand(self, action, game_state, agent):
+        child = agent.create_node(game_state, self.action_space, self.enemy_id, self.agent_id, action)
         child.parent = self
         self.children[action] = child
         self.unseen_actions.remove(action)
@@ -153,7 +159,7 @@ class BaseMCTSAgent(AbstractMCTSAgent):
     def get_root(self, obs, action_space):
         if (self.root == None):
             game_state = Env_simulator.get_initial_game_state(obs, self.agent_id)
-            self.root = Node(game_state, action_space, self.agent_id, self.enemies[0].value - 10, None)
+            self.root = self.create_node(game_state, action_space, self.agent_id, self.enemies[0].value - 10, None)
         else:
             actions, reset = Env_simulator.update(self.root.game_state, obs, self.agent_id)
             child = self.root.get_child(actions)
@@ -163,7 +169,7 @@ class BaseMCTSAgent(AbstractMCTSAgent):
             else:
                 #print(f'ROOT RESET!\n{actions}\n')
                 #print(f'{child}\n{self.root.game_state.board}\n{child.game_state.board}')
-                self.root = Node(self.root.game_state, action_space, self.agent_id, self.enemies[0].value - 10, None)
+                self.root = self.create_node(self.root.game_state, action_space, self.agent_id, self.enemies[0].value - 10, None)
 
         self.root_changed(self.root)
         return self.root
@@ -177,12 +183,12 @@ class BaseMCTSAgent(AbstractMCTSAgent):
         # pick unvisited child
         if node.agent_id == self.agent_id:
             action = self.get_my_expand_action(node)
-            node = node.expand(action, node.game_state)
+            node = node.expand(action, node.game_state, self)
 
         game_state = copy.deepcopy(node.game_state)
         action = self.get_enemy_expand_action(node)
         Env_simulator.act(game_state, {node.enemy_id: node.action, node.agent_id: action})
-        return node.expand(action, game_state)
+        return node.expand(action, game_state, self)
 
     @abstractmethod
     def get_my_expand_action(self, node):
@@ -206,15 +212,15 @@ class BaseMCTSAgent(AbstractMCTSAgent):
             actions[self.agent_id] = node.action
         else:
             actions[self.agent_id] = self.get_my_rollout_action(node)
-            if expand_tree: node = node.expand(actions[self.agent_id], node.game_state)
+            if expand_tree: node = node.expand(actions[self.agent_id], node.game_state, self)
 
         actions[self.enemies[0].value - 10] = self.get_enemy_rollout_action(node)
 
         game_state = copy.deepcopy(node.game_state)
         Env_simulator.act(game_state, actions)
 
-        if expand_tree: new_node = node.expand(actions[self.enemies[0].value - 10], game_state)
-        else: new_node = Node(game_state, node.action_space, self.agent_id, self.enemies[0].value - 10, None)
+        if expand_tree: new_node = node.expand(actions[self.enemies[0].value - 10], game_state, self)
+        else: new_node = self.create_node(game_state, node.action_space, self.agent_id, self.enemies[0].value - 10, None)
 
         return new_node
 
