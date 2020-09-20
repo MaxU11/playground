@@ -8,6 +8,6 @@ from .random_agent import RandomAgent
 from .simple_agent import SimpleAgent
 from .tensorforce_agent import TensorForceAgent
 
-from .ucb_rnd_mcts_agent import UBC_RND_MCTSAgent
-from .ucb_rnd_limit_mcts_agent import UBC_RND_Limit_MCTSAgent
+from .ucb_mcts_agent import UcbMCTSAgent
+from .ucb_limit_mcts_agent import UcbLimitMCTSAgent
 from .simulate_simple_agent_move import Simulate_SimpleAgent

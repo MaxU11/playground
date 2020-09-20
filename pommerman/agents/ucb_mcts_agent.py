@@ -1,29 +1,27 @@
 # The UCB MCTS agent
+
 import math
 import random
 
-import copy
 from collections import defaultdict
-from .base_mcts_agent import BaseMCTSAgent
-from .base_mcts_agent import Node
-from .env_simulator import Env_simulator
-from .env_simulator import Game_state
-from .. import constants
+from .abstract_mcts_agent import AbstractMCTSAgent
 
 
-class UBC_RND_MCTSAgent(BaseMCTSAgent):
-    """The Base-MCTS Agent."""
+class UcbMCTSAgent(AbstractMCTSAgent):
+    """The UCB-MCTS Agent."""
 
     root = None
 
     def __init__(self, *args, **kwargs):
-        super(UBC_RND_MCTSAgent, self).__init__(*args, **kwargs)
+        super(UcbMCTSAgent, self).__init__(*args, **kwargs)
         self.maxIterations = 1000
         self.iterations = 0
         self.Q = defaultdict(int)  # total reward of each node
         self.N = defaultdict(int)  # total visit count for each node
         self.C = 0.5  # exploration weight
         self.discount_factor = 0.9999
+        self.depth_limit = 26
+        self.expand_tree_rollout = False
 
     def root_changed(self, root):
         # signal that root has changed
@@ -63,21 +61,17 @@ class UBC_RND_MCTSAgent(BaseMCTSAgent):
         return random.choice(node.unseen_actions)
 
     def get_my_rollout_action(self, node):
-        if len(node.unseen_actions) <= 0:
-            print(node.game_state.board)
         # return action from my agent
         return random.choice(node.unseen_actions)
 
     def get_enemy_rollout_action(self, node):
-        if len(node.unseen_actions) <= 0:
-            print(node.game_state.board)
         # return action from my agent
         return random.choice(node.unseen_actions)
 
-    def result(self, node):
+    def result(self, node, data):
         # get reward from terminal node
         reward = 0.0
-        for a in node.game_state.agents:
+        for a in data.agents:
             if a.agent_id == self.agent_id:
                 if a.is_alive:
                     reward += 1.0
@@ -117,3 +111,10 @@ class UBC_RND_MCTSAgent(BaseMCTSAgent):
             info += '{}: {}|{:.2f}, '.format(a, self.N[node.children[a]], self.Q[node.children[a]]/self.N[node.children[a]])
         info += ')'
         return info
+
+    def non_terminal(self, node):
+        # check if node is terminal
+        if self.depth_limit and (node.depth - self.root.depth) >= self.depth_limit:
+            return False
+
+        return AbstractMCTSAgent.non_terminal(self, node)

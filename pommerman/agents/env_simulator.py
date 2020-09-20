@@ -6,70 +6,72 @@ from pommerman import constants
 from pommerman import characters
 from pommerman import utility
 
+
 class Env_simulator:
 
     @staticmethod
-    def get_initial_game_state(obs, my_id, max_steps=1000):
-        game_state = Game_state()
-        game_state.board_size = len(obs['board'])
-        game_state.step_count = obs['step_count'] - 1
-        game_state.max_steps = max_steps
-        game_state.game_type = obs['game_type']
+    def get_initial_game_data(obs, my_id, max_steps=1000):
+        game_data = GameData()
+        game_data.board_size = len(obs['board'])
+        game_data.step_count = obs['step_count'] - 1
+        game_data.max_steps = max_steps
+        game_data.game_type = obs['game_type']
 
         # board
-        game_state.board = Env_simulator.get_board(game_state.board_size, obs['board'])
+        game_data.board = Env_simulator.get_board(game_data.board_size, obs['board'])
 
         # items
-        game_state.items = {}
+        game_data.items = {}
 
         # agents
-        game_state.agents = []
+        game_data.agents = []
         for id in [constants.Item.Agent0.value - 10, constants.Item.Agent1.value - 10]:
             board_id = id + 10
-            agent = characters.Bomber(id, game_state.game_type)
-            agent.set_start_position(Env_simulator.get_position(game_state.board, board_id, True))
+            agent = characters.Bomber(id, game_data.game_type)
+            agent.set_start_position(Env_simulator.get_position(game_data.board, board_id, True))
             if (id == my_id):
-                agent.reset(int(obs['ammo']), board_id in obs['alive'], int(obs['blast_strength']), bool(obs['can_kick']))
+                agent.reset(int(obs['ammo']), board_id in obs['alive'], int(obs['blast_strength']),
+                            bool(obs['can_kick']))
             else:
                 agent.reset(agent.ammo, board_id in obs['alive'], agent.blast_strength, agent.can_kick)
-            game_state.agents.append(agent)
+            game_data.agents.append(agent)
 
         # bombs
-        game_state.bombs = []
-        bomb_array = Env_simulator.get_position(game_state.board, constants.Item.Bomb.value, False)
+        game_data.bombs = []
+        bomb_array = Env_simulator.get_position(game_data.board, constants.Item.Bomb.value, False)
         if len(bomb_array) > 0:
             raise ValueError('Invalid: no bombs allowed in initial state')
 
         # flames
-        game_state.flames = []
-        flame_array = Env_simulator.get_position(game_state.board, constants.Item.Flames.value, False)
+        game_data.flames = []
+        flame_array = Env_simulator.get_position(game_data.board, constants.Item.Flames.value, False)
         if len(flame_array) > 0:
             raise ValueError('Invalid: no flames allowed in initial state')
 
         # done
-        game_state.done = forward_model.ForwardModel.get_done(game_state.agents, game_state.step_count,
-                                   game_state.max_steps, game_state.game_type, None)
+        game_data.done = forward_model.ForwardModel.get_done(game_data.agents, game_data.step_count,
+                                                             game_data.max_steps, game_data.game_type, None)
 
-        return game_state
+        return game_data
 
     @staticmethod
-    def update(game_state, obs, my_id):
+    def update(game_data, obs, my_id):
         enemy_id = 0
         if my_id is 0: enemy_id = 1
 
-        if (game_state.board_size != len(obs['board'])):
+        if (game_data.board_size != len(obs['board'])):
             raise ValueError('Invalid update: boardsize different!')
-        if (game_state.step_count+1 != obs['step_count']):
+        if (game_data.step_count + 1 != obs['step_count']):
             raise ValueError('Invalid update: missed step count!')
-        game_state.step_count = obs['step_count']
+        game_data.step_count = obs['step_count']
 
-        new_board = Env_simulator.get_board(game_state.board_size, obs['board'])
-        new_bomb_life = Env_simulator.get_board(game_state.board_size, obs['bomb_life'], 0)
+        new_board = Env_simulator.get_board(game_data.board_size, obs['board'])
+        new_bomb_life = Env_simulator.get_board(game_data.board_size, obs['bomb_life'], 0)
 
         # get actions
         actions = {}
-        for a in game_state.agents:
-            old_pos = Env_simulator.get_position(game_state.board, a.agent_id + 10, True)
+        for a in game_data.agents:
+            old_pos = Env_simulator.get_position(game_data.board, a.agent_id + 10, True)
             new_pos = Env_simulator.get_position(new_board, a.agent_id + 10, True)
 
             if (old_pos != new_pos):
@@ -79,53 +81,53 @@ class Env_simulator:
             else:
                 actions[a.agent_id] = constants.Action.Stop.value
 
-        Env_simulator.act(game_state, actions)
+        Env_simulator.act(game_data, actions)
 
-        # print("board: \n", game_state.board)
-        # print("agent1: ", game_state.agents[0].ammo, game_state.agents[0].blast_strength, game_state.agents[0].can_kick)
-        # print("agent2: ", game_state.agents[1].ammo, game_state.agents[1].blast_strength, game_state.agents[1].can_kick)
+        # print("board: \n", game_data.board)
+        # print("agent1: ", game_data.agents[0].ammo, game_data.agents[0].blast_strength, game_data.agents[0].can_kick)
+        # print("agent2: ", game_data.agents[1].ammo, game_data.agents[1].blast_strength, game_data.agents[1].can_kick)
 
         reset = False
 
         # compare boards
-        if not Env_simulator.boards_equal(game_state.board, new_board, True):
-            a1bomb, a2bomb, kick, flame = Env_simulator.get_boards_differences(game_state.board, new_board)
+        if not Env_simulator.boards_equal(game_data.board, new_board, True):
+            a1bomb, a2bomb, kick, flame = Env_simulator.get_boards_differences(game_data.board, new_board)
             print(a1bomb, a2bomb, kick, flame)
             if a1bomb and my_id is not 0:
-                game_state.agents[0].ammo += 1
+                game_data.agents[0].ammo += 1
             elif a2bomb and my_id is not 1:
-                game_state.agents[1].ammo += 1
-            elif kick and game_state.agents[my_id].can_kick is bool(obs['can_kick']):
-                game_state.agents[enemy_id].can_kick = True
-            elif flame and game_state.agents[my_id].blast_strength is int(obs['blast_strength']):
-                game_state.agents[enemy_id].blast_strength += 1
+                game_data.agents[1].ammo += 1
+            elif kick and game_data.agents[my_id].can_kick is bool(obs['can_kick']):
+                game_data.agents[enemy_id].can_kick = True
+            elif flame and game_data.agents[my_id].blast_strength is int(obs['blast_strength']):
+                game_data.agents[enemy_id].blast_strength += 1
             reset = True
 
-        game_state.agents[my_id].ammo = int(obs['ammo'])
-        game_state.agents[my_id].blast_strength = int(obs['blast_strength'])
-        game_state.agents[my_id].can_kick = bool(obs['can_kick'])
+        game_data.agents[my_id].ammo = int(obs['ammo'])
+        game_data.agents[my_id].blast_strength = int(obs['blast_strength'])
+        game_data.agents[my_id].can_kick = bool(obs['can_kick'])
 
         # update board because of items
-        game_state.board = new_board
+        game_data.board = new_board
 
-        return actions, reset
+        return game_data, actions, reset
 
     @staticmethod
-    def act(game_state, actions):
-        game_state.board, \
-        game_state.agents, \
-        game_state.bombs, \
-        game_state.items, \
-        game_state.flames = forward_model.ForwardModel.step(actions,
-                                                            game_state.board,
-                                                            game_state.agents,
-                                                            game_state.bombs,
-                                                            game_state.items,
-                                                            game_state.flames)
+    def act(game_data, actions):
+        game_data.board, \
+        game_data.agents, \
+        game_data.bombs, \
+        game_data.items, \
+        game_data.flames = forward_model.ForwardModel.step(actions,
+                                                            game_data.board,
+                                                            game_data.agents,
+                                                            game_data.bombs,
+                                                            game_data.items,
+                                                            game_data.flames)
 
         # done
-        game_state.done = forward_model.ForwardModel.get_done(game_state.agents, game_state.step_count,
-                                                 game_state.max_steps, game_state.game_type, None)
+        game_data.done = forward_model.ForwardModel.get_done(game_data.agents, game_data.step_count,
+                                                              game_data.max_steps, game_data.game_type, None)
 
     @staticmethod
     def get_board(board_size, board_array, init_value=constants.Item.Passage.value):
@@ -184,20 +186,23 @@ class Env_simulator:
         a1bomb = a2bomb = kick = flame = False
         comparison = (board1 == board2)
         diffs = np.where(comparison is False)
-        diffs = list(zip(diffs[0], diffs[1]))
-        for diff in diffs:
-            prev_item = board1[diff]
-            new_item = board2[diff]
-            if prev_item is constants.Item.Agent1 and new_item is constants.Item.Bomb:
-                a1bomb = True
-            elif prev_item is constants.Item.Agent2 and new_item is constants.Item.Bomb:
-                a2bomb = True
-            elif prev_item is constants.Item.Passage and new_item is constants.Item.Bomb:
-                kick = True
-            elif new_item is constants.Item.Flames:
-                flame = True
-            else:
-                raise ValueError('Invalid difference between maps.')
+        if len(diffs) >= 2:
+            diffs = list(zip(diffs[0], diffs[1]))
+            for diff in diffs:
+                prev_item = board1[diff]
+                new_item = board2[diff]
+                if prev_item is constants.Item.Agent1 and new_item is constants.Item.Bomb:
+                    a1bomb = True
+                elif prev_item is constants.Item.Agent2 and new_item is constants.Item.Bomb:
+                    a2bomb = True
+                elif prev_item is constants.Item.Passage and new_item is constants.Item.Bomb:
+                    kick = True
+                elif new_item is constants.Item.Flames:
+                    flame = True
+                else:
+                    raise ValueError('Invalid difference between maps.')
+        else:
+            print(comparison, diffs)
 
         return a1bomb, a2bomb, kick, flame
 
@@ -206,7 +211,7 @@ class Env_simulator:
         '''Determins if a move is in a valid direction'''
         row, col = position
         invalid_values = [item.value for item in \
-                         [constants.Item.Rigid, constants.Item.Wood]]
+                          [constants.Item.Rigid, constants.Item.Wood]]
         if not can_kick:
             invalid_values.append(constants.Item.Bomb.value)
 
@@ -229,26 +234,34 @@ class Env_simulator:
             return True
 
         if constants.Action(direction) == constants.Action.Up:
-            return row - 1 >= 0 and board[row - 1][col] not in invalid_values and (row - 1, col) not in invalid_positions
+            return row - 1 >= 0 and board[row - 1][col] not in invalid_values and (
+            row - 1, col) not in invalid_positions
 
         if constants.Action(direction) == constants.Action.Down:
-            return row + 1 < len(board) and board[row + 1][col] not in invalid_values and (row + 1, col) not in invalid_positions
+            return row + 1 < len(board) and board[row + 1][col] not in invalid_values and (
+            row + 1, col) not in invalid_positions
 
         if constants.Action(direction) == constants.Action.Left:
-            return col - 1 >= 0 and board[row][col - 1] not in invalid_values and (row, col - 1) not in invalid_positions
+            return col - 1 >= 0 and board[row][col - 1] not in invalid_values and (
+            row, col - 1) not in invalid_positions
 
         if constants.Action(direction) == constants.Action.Right:
-            return col + 1 < len(board[0]) and board[row][col + 1] not in invalid_values and (row, col + 1) not in invalid_positions
+            return col + 1 < len(board[0]) and board[row][col + 1] not in invalid_values and (
+            row, col + 1) not in invalid_positions
 
         raise constants.InvalidAction("We did not receive a valid direction: ", direction)
 
     @staticmethod
     def _get_bomb_fire_positions(board, bomb, fire_pos):
         fire_pos.append(bomb.position)
-        Env_simulator._get_fire_positions_in_direction(board, bomb.position[0], bomb.position[1], bomb.blast_strength-1,  0,  1, fire_pos) # right
-        Env_simulator._get_fire_positions_in_direction(board, bomb.position[0], bomb.position[1], bomb.blast_strength-1,  0, -1, fire_pos) # left
-        Env_simulator._get_fire_positions_in_direction(board, bomb.position[0], bomb.position[1], bomb.blast_strength-1, -1,  0, fire_pos) # up
-        Env_simulator._get_fire_positions_in_direction(board, bomb.position[0], bomb.position[1], bomb.blast_strength-1,  1,  0, fire_pos) # down
+        Env_simulator._get_fire_positions_in_direction(board, bomb.position[0], bomb.position[1],
+                                                       bomb.blast_strength - 1, 0, 1, fire_pos)  # right
+        Env_simulator._get_fire_positions_in_direction(board, bomb.position[0], bomb.position[1],
+                                                       bomb.blast_strength - 1, 0, -1, fire_pos)  # left
+        Env_simulator._get_fire_positions_in_direction(board, bomb.position[0], bomb.position[1],
+                                                       bomb.blast_strength - 1, -1, 0, fire_pos)  # up
+        Env_simulator._get_fire_positions_in_direction(board, bomb.position[0], bomb.position[1],
+                                                       bomb.blast_strength - 1, 1, 0, fire_pos)  # down
 
     @staticmethod
     def _get_fire_positions_in_direction(board, x, y, strength, x_dir, y_dir, fire_pos):
@@ -262,7 +275,7 @@ class Env_simulator:
             return
 
         fire_pos.append((next_x, next_y))
-        Env_simulator._get_fire_positions_in_direction(board, next_x, next_y, strength-1, x_dir, y_dir, fire_pos)
+        Env_simulator._get_fire_positions_in_direction(board, next_x, next_y, strength - 1, x_dir, y_dir, fire_pos)
 
-class Game_state:
+class GameData:
     pass

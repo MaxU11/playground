@@ -26,6 +26,8 @@ from pommerman import helpers
 from pommerman import make
 from pommerman import utility
 
+from pommerman.agents import SimpleAgent
+
 def run(args, num_times=1, seed=None):
     '''Wrapper to help start the game'''
     config = args.config
@@ -54,6 +56,8 @@ def run(args, num_times=1, seed=None):
         obs = env.reset()
         done = False
 
+        prev_obs = None
+
         while not done:
             if args.render:
                 env.render(
@@ -64,7 +68,14 @@ def run(args, num_times=1, seed=None):
                 env.save_json(record_json_dir)
                 time.sleep(1.0 / env._render_fps)
             actions = env.act(obs)
+            prev_obs = obs
             obs, reward, done, info = env.step(actions)
+
+        agent = SimpleAgent()
+        action = agent.act(prev_obs, env.action_space)
+        action = agent.act(prev_obs, env.action_space)
+        action = agent.act(prev_obs, env.action_space)
+        action = agent.act(prev_obs, env.action_space)
 
         print("Final Result: ", info)
         if args.render:
