@@ -10,4 +10,6 @@ from .tensorforce_agent import TensorForceAgent
 
 from .ucb_mcts_agent import UcbMCTSAgent
 from .ucb_limit_mcts_agent import UcbLimitMCTSAgent
+from .ucb_mr_mcts_agent import UcbMRMCTSAgent
+from .ucb_mr_limit_mcts_agent import UcbMRLimitMCTSAgent
 from .simulate_simple_agent_move import Simulate_SimpleAgent

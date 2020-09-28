@@ -4,20 +4,35 @@ import datetime
 
 from abc import ABC, abstractmethod
 from . import BaseAgent
+from .. import characters
 
 
 class AbstractMCTSSkeleton(ABC, BaseAgent):
     """The MCTS Skeleton."""
 
     def __init__(self, *args, **kwargs):
-        super(AbstractMCTSSkeleton, self).__init__(*args, **kwargs)
-        self.expand_tree_rollout = False
+        super(AbstractMCTSSkeleton, self).__init__(character=kwargs.get('character', characters.Bomber))
+        self._actNum = 0
+        self._avgTime = 0
+        self._rolloutNum = 0
+        self._avgRolloutDepth = 0
+
+    def reset(self):
+        self._actNum = 0
+        self._avgTime = 0
+        self._rolloutNum = 0
+        self._avgRolloutDepth = 0
+        self.agent_reset()
+        self._character.reset()
 
     def act(self, obs, action_space):
         start_t = datetime.datetime.now()
+        iterations = 0
+        self._actNum += 1
 
         root = self.get_root(obs, action_space)
         while self.is_search_active():
+            iterations += 1
             leaf = self.traverse(root)
             simulation_result, leaf = self.rollout(leaf)
             self.backpropagate(leaf, simulation_result)
@@ -25,8 +40,9 @@ class AbstractMCTSSkeleton(ABC, BaseAgent):
         #self.search_finished()
 
         a = self.best_child(root)
-        end_t = datetime.datetime.now()
-        print(f'selected action: {a}, time: {end_t - start_t}')
+        time_diff = datetime.datetime.now() - start_t
+        self._avgTime = self._avgTime + (time_diff.total_seconds() - self._avgTime) / self._actNum
+        # print(f'player{self.agent_id}: selected action: {a}, time: {time_diff}, iterations: {iterations}, board: \n{obs["board"]}')
         return a
 
     # function for node traversal
@@ -43,8 +59,12 @@ class AbstractMCTSSkeleton(ABC, BaseAgent):
     def rollout(self, node):
         leaf = node
         data = self.get_data(node)
+        self._rolloutNum += 1
+        depth = 0
         while self.non_terminal(node):
+            depth += 1
             node, data = self.rollout_policy(node, data)
+        self._avgRolloutDepth = self._avgRolloutDepth + (depth - self._avgRolloutDepth) / self._rolloutNum
         if len(leaf.children) > 0:
             leaf = node
         return self.result(node, data), leaf
@@ -55,6 +75,15 @@ class AbstractMCTSSkeleton(ABC, BaseAgent):
         if node.is_root():
             return
         self.backpropagate(node.parent, result)
+
+    def get_agent_info(self, info):
+        info['avgTime'] = self._avgTime
+        info['avgRolloutDepth'] = self._avgRolloutDepth
+
+    @abstractmethod
+    def agent_reset(self):
+        # reset agent
+        raise NotImplementedError()
 
     @abstractmethod
     def get_root(self, obs, action_space):

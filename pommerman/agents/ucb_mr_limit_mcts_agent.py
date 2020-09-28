@@ -1,16 +1,17 @@
-# The UCB MCTS agent
+# The UCB MiniMax-Rollout MCTS agent
 
-from .ucb_mcts_agent import UcbMCTSAgent
-from .abstract_mcts_agent import Node
+import random
+
+from .ucb_mr_mcts_agent import UcbMRMCTSAgent
 from .env_simulator import EnvSimulator
 from .. import constants
 
 
-class UcbLimitMCTSAgent(UcbMCTSAgent):
-    """The Base-MCTS Agent."""
+class UcbMRLimitMCTSAgent(UcbMRMCTSAgent):
+    """The LimitedMiniMaxRollout-MCTS Agent."""
 
     def __init__(self, *args, **kwargs):
-        super(UcbLimitMCTSAgent, self).__init__(*args, **kwargs)
+        super(UcbMRMCTSAgent, self).__init__(*args, **kwargs)
         # parent hyperparameter
         self.expandTreeRollout = kwargs.get('expandTreeRollout', False)
         self.maxIterations = kwargs.get('maxIterations', 1000)
@@ -18,12 +19,10 @@ class UcbLimitMCTSAgent(UcbMCTSAgent):
         self.discountFactor = kwargs.get('discountFactor', 0.9999)
         self.depthLimit = kwargs.get('depthLimit', 26)
         self.C = kwargs.get('C', 0.5)  # exploration weight
+        self.MRDepthLimit = kwargs('MRDepthLimit', 2)
 
-    def create_node(self, depth, game_data, action_space, agent_id, enemy_id, action, save_data=True):
-        node = UcbMCTSAgent.create_node(self, depth, game_data, action_space, agent_id, enemy_id, action, save_data)
-
-        node.unseen_actions = self.get_valid_acions(game_data, agent_id, node.unseen_actions)
-        return node
+    def getActionSpace(self, game_data, agent_id, action_space):
+        return self.get_valid_acions(game_data, agent_id, action_space)
 
     def get_valid_acions(self, game_data, agent_id, actions):
         # check valid actions

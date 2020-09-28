@@ -5,6 +5,7 @@ import random
 
 from collections import defaultdict
 from .abstract_mcts_agent import AbstractMCTSAgent
+from .env_simulator import EnvSimulator
 
 
 class UcbMCTSAgent(AbstractMCTSAgent):
@@ -14,25 +15,28 @@ class UcbMCTSAgent(AbstractMCTSAgent):
 
     def __init__(self, *args, **kwargs):
         super(UcbMCTSAgent, self).__init__(*args, **kwargs)
-        self.maxIterations = 1000
-        self.iterations = 0
+        # parent hyperparameter
+        self.expandTreeRollout = kwargs.get('expandTreeRollout', False)
+        self.maxIterations = kwargs.get('maxIterations', 1000)
+        self.maxTime = kwargs.get('maxTime', 0.1)
+        # hyperparameter
+        self.discountFactor = kwargs.get('discountFactor', 0.9999)
+        self.depthLimit = kwargs.get('depthLimit', 26)
+        self.C = kwargs.get('C', 0.5) # exploration weight
+
         self.Q = defaultdict(int)  # total reward of each node
         self.N = defaultdict(int)  # total visit count for each node
-        self.C = 0.5  # exploration weight
-        self.discount_factor = 0.9999
-        self.depth_limit = 26
-        self.expand_tree_rollout = False
+
+    def agent_reset(self):
+        self.Q = defaultdict(int)  # total reward of each node
+        self.N = defaultdict(int)  # total visit count for each node
+        AbstractMCTSAgent.agent_reset(self)
 
     def root_changed(self, root):
         # signal that root has changed
-        self.iterations = 0
         if root is None:
             self.Q = defaultdict(int)
             self.N = defaultdict(int)
-
-    def is_search_active(self):
-        self.iterations += 1
-        return self.iterations < self.maxIterations
 
     def get_selected_child(self, node):
         # select child for traversing using UCB
@@ -60,25 +64,28 @@ class UcbMCTSAgent(AbstractMCTSAgent):
         # return action from my agent
         return random.choice(node.unseen_actions)
 
-    def get_my_rollout_action(self, node):
+    def get_my_rollout_action(self, node, data):
         # return action from my agent
+        #if node.agent_id == 0:
+        #    data.simulation_bomb_life = 2
         return random.choice(node.unseen_actions)
 
-    def get_enemy_rollout_action(self, node):
+    def get_enemy_rollout_action(self, node, data):
         # return action from my agent
         return random.choice(node.unseen_actions)
 
     def result(self, node, data):
         # get reward from terminal node
         reward = 0.0
-        for a in data.agents:
-            if a.agent_id == self.agent_id:
-                if a.is_alive:
+        alive = EnvSimulator.get_alive(data)
+        for a in alive:
+            if a == self.agent_id:
+                if alive[a]:
                     reward += 1.0
                 else:
                     reward += -1.0
             else:
-                if a.is_alive:
+                if alive[a]:
                     reward += -0.5
                 else:
                     reward += 0.5
@@ -90,15 +97,17 @@ class UcbMCTSAgent(AbstractMCTSAgent):
         self.Q[node] += result
 
         node.reward = self.Q[node] / self.N[node]
-        return result * self.discount_factor
+        return result * self.discountFactor
 
     def best_child(self, node):
         # pick child with highest number of visits
         def score(a):
             child = node.children[a]
             if self.N[child] == 0:
-                return float("-inf")
-            return self.Q[child] / self.N[child]
+                print('pick of unvisited childs!!')
+                return 0 # float("-inf")
+            score = self.Q[child] / self.N[child]
+            return score
 
         if node.agent_id == self.agent_id:
             return max(node.children, key=score)
@@ -114,7 +123,7 @@ class UcbMCTSAgent(AbstractMCTSAgent):
 
     def non_terminal(self, node):
         # check if node is terminal
-        if self.depth_limit and (node.depth - self.root.depth) >= self.depth_limit:
+        if self.depthLimit and (node.depth - self.root.depth) >= self.depthLimit:
             return False
 
         return AbstractMCTSAgent.non_terminal(self, node)

@@ -70,12 +70,14 @@ def run(args, num_times=1, seed=None):
             actions = env.act(obs)
             prev_obs = obs
             obs, reward, done, info = env.step(actions)
+            if done:
+                print(actions)
 
-        agent = SimpleAgent()
-        action = agent.act(prev_obs, env.action_space)
-        action = agent.act(prev_obs, env.action_space)
-        action = agent.act(prev_obs, env.action_space)
-        action = agent.act(prev_obs, env.action_space)
+        #agent = SimpleAgent()
+        #action = agent.act(prev_obs, env.action_space)
+        #action = agent.act(prev_obs, env.action_space)
+        #action = agent.act(prev_obs, env.action_space)
+        #action = agent.act(prev_obs, env.action_space)
 
         print("Final Result: ", info)
         if args.render:

@@ -1,11 +1,11 @@
 '''The base MCTS agent'''
 
 import numpy as np
-import _pickle as cPickle
+import datetime
 
 from abc import abstractmethod
 from .abstract_mcts_skeleton import AbstractMCTSSkeleton
-from .env_simulator import Env_simulator
+from .env_simulator import EnvSimulator
 
 
 class AbstractMCTSAgent(AbstractMCTSSkeleton):
@@ -15,16 +15,34 @@ class AbstractMCTSAgent(AbstractMCTSSkeleton):
 
     def __init__(self, *args, **kwargs):
         super(AbstractMCTSAgent, self).__init__(*args, **kwargs)
+        # hyperparameter
+        self.expandTreeRollout = kwargs.get('expandTreeRollout', False)
+        self.maxIterations = kwargs.get('maxIterations', 1000)
+        self.maxTime = kwargs.get('maxTime', 0.1)
+
+        self.iterations = 0
+        self.startTime = 0
+        self.file_step_count = 0
+
+    def agent_reset(self):
+        self.root = None
+        self.iterations = 0
+        self.startTime = 0
+        self.file_step_count = 0
 
     def get_root(self, obs, action_space):
+        self.iterations = 0
+        if self.maxTime > 0.0:
+            self.startTime = datetime.datetime.now()
+
         if (self.root == None):
-            game_data = Env_simulator.get_initial_game_data(obs, self.agent_id)
+            game_data = EnvSimulator.get_initial_game_data(obs, self.agent_id)
             self.root = self.create_node(0, game_data, action_space, self.agent_id, self.enemies[0].value - 10, None)
         else:
             game_data = Node.get_game_data(self.root.game_state)
-            game_data, actions, reset = Env_simulator.update(game_data, obs, self.agent_id)
+            game_data, actions, reset = EnvSimulator.update(game_data, obs, self.agent_id)
             child = self.root.get_child(actions)
-            if not reset and child and Env_simulator.boards_equal(game_data.board, Node.get_game_data(child.game_state).board, False):
+            if not reset and child and EnvSimulator.boards_equal(game_data.board, Node.get_game_data(child.game_state).board, False):
                 child.game_state, done = Node.get_game_state(game_data)
                 self.root = child
                 self.root.parent = None
@@ -40,6 +58,14 @@ class AbstractMCTSAgent(AbstractMCTSSkeleton):
         # signal that root has changed
         raise NotImplementedError()
 
+    def is_search_active(self):
+        self.iterations += 1
+        if self.maxTime > 0.0:
+            timeDiff = datetime.datetime.now() - self.startTime
+            return timeDiff.total_seconds() < self.maxTime
+        else:
+            return self.iterations <= self.maxIterations
+
     def get_data(self, node):
         return Node.get_game_data(node.game_state)
 
@@ -52,7 +78,7 @@ class AbstractMCTSAgent(AbstractMCTSSkeleton):
             node = node.expand(action, game_data, self)
 
         action = self.get_enemy_expand_action(node)
-        Env_simulator.act(game_data, {node.enemy_id: node.action, node.agent_id: action})
+        EnvSimulator.act(game_data, {node.enemy_id: node.action, node.agent_id: action})
         return node.expand(action, game_data, self)
 
     @abstractmethod
@@ -75,25 +101,25 @@ class AbstractMCTSAgent(AbstractMCTSSkeleton):
         if node.agent_id != self.agent_id:
             actions[self.agent_id] = node.action
         else:
-            actions[self.agent_id] = self.get_my_rollout_action(node)
-            if self.expand_tree_rollout: node = node.expand(actions[self.agent_id], data, self)
+            actions[self.agent_id] = self.get_my_rollout_action(node, data)
+            if self.expandTreeRollout: node = node.expand(actions[self.agent_id], data, self)
 
-        actions[self.enemies[0].value - 10] = self.get_enemy_rollout_action(node)
+        actions[self.enemies[0].value - 10] = self.get_enemy_rollout_action(node, data)
 
-        Env_simulator.act(data, actions)
+        EnvSimulator.act(data, actions)
 
-        if self.expand_tree_rollout: new_node = node.expand(actions[self.enemies[0].value - 10], data, self)
+        if self.expandTreeRollout: new_node = node.expand(actions[self.enemies[0].value - 10], data, self)
         else: new_node = self.create_node(node.depth + 1, data, node.action_space, self.agent_id, self.enemies[0].value - 10, None, False)
 
         return new_node, data
 
     @abstractmethod
-    def get_my_rollout_action(self, node):
+    def get_my_rollout_action(self, node, data):
         # return action from my agent
         raise NotImplementedError()
 
     @abstractmethod
-    def get_enemy_rollout_action(self, node):
+    def get_enemy_rollout_action(self, node, data):
         # return action from my agent
         raise NotImplementedError()
 
@@ -102,11 +128,14 @@ class AbstractMCTSAgent(AbstractMCTSSkeleton):
         if save_data:
             return Node(depth, game_data, action_space, agent_id, enemy_id, action)
         else:
-            return Node(depth, None, action_space, agent_id, enemy_id, action)
+            new_node = Node(depth, None, action_space, agent_id, enemy_id, action)
+            new_node.done = EnvSimulator.get_done(game_data)
+            return new_node
 
     def search_finished(self):
+        self.file_step_count += 1
         # called when search has finished
-        self.save_tree_info(f'c:\\tmp\\{self.root.game_state.step_count}.txt', self.root)
+        self.save_tree_info(f'c:\\tmp\\{self.agent_id}_{self.file_step_count}.txt', self.root)
         pass
 
     def get_tree_info(self, root):
@@ -159,7 +188,7 @@ class AbstractMCTSAgent(AbstractMCTSSkeleton):
 class Node():
 
     def __init__(self, depth, game_data, action_space, agent_id, enemy_id, action, valid_actions=None):
-        if game_data:
+        if not game_data is None:
             self.game_state, self.done = Node.get_game_state(game_data)
         else:
             self.game_state = None
@@ -199,10 +228,8 @@ class Node():
 
     @staticmethod
     def get_game_state(game_data):
-        # return game_data, game_data.done
-        return cPickle.dumps(game_data), game_data.done
+        return EnvSimulator.get_game_state(game_data)
 
     @staticmethod
     def get_game_data(game_state):
-        # return copy.deepcopy(game_state)
-        return cPickle.loads(game_state)
+        return EnvSimulator.get_game_data(game_state)

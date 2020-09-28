@@ -3,9 +3,12 @@ import argparse
 
 def main():
     '''CLI entry pointed used to bootstrap a battle'''
-    simple_agent = 'test::agents.UBC_RND_Limit_MCTSAgent'
-    #player_agent = 'player::arrows'
-    player_agent = 'test::agents.SimpleAgent'
+    agent_ucb = 'test::agents.UcbMCTSAgent'
+    agent_ucblimit = 'test::agents.UcbLimitMCTSAgent'
+    agent_ucbmr = 'test::agents.UcbMRMCTSAgent'
+    agent_ucbmrlimit = 'test::agents.UcbMRLimitMCTSAgent'
+    agent_simple = 'test::agents.SimpleAgent'
+    player_agent = 'player::arrows'
     #docker_agent = 'docker::pommerman/simple-agent'
 
     parser = argparse.ArgumentParser(description='Playground Flags.')
@@ -16,7 +19,7 @@ def main():
         'configs.py for options.')
     parser.add_argument(
         '--agents',
-        default=','.join([simple_agent] + [player_agent]),
+        default=','.join([agent_ucblimit] + [agent_ucblimit]),
         # default=','.join([player_agent] + [simple_agent]*3]),
         # default=','.join([docker_agent] + [simple_agent]*3]),
         help='Comma delineated list of agent types and docker '
