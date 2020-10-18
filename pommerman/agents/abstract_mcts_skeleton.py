@@ -39,6 +39,9 @@ class AbstractMCTSSkeleton(ABC, BaseAgent):
 
         #self.search_finished()
 
+        if len(root.children) == 0:
+            print('no children!!!!', iterations, root.done, root.depth)
+
         a = self.best_child(root)
         time_diff = datetime.datetime.now() - start_t
         self._avgTime = self._avgTime + (time_diff.total_seconds() - self._avgTime) / self._actNum
@@ -63,7 +66,12 @@ class AbstractMCTSSkeleton(ABC, BaseAgent):
         depth = 0
         while self.non_terminal(node):
             depth += 1
+            #save_copy_data = copy.deepcopy(data)
             node, data = self.rollout_policy(node, data)
+
+        #self.get_valid_actions(save_copy_data, 0, range(6))
+        #self.get_valid_actions(save_copy_data, 1, range(6))
+
         self._avgRolloutDepth = self._avgRolloutDepth + (depth - self._avgRolloutDepth) / self._rolloutNum
         if len(leaf.children) > 0:
             leaf = node

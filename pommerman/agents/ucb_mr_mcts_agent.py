@@ -20,7 +20,7 @@ class UcbMRMCTSAgent(UcbMCTSAgent):
         self.depthLimit = kwargs.get('depthLimit', 26)
         self.C = kwargs.get('C', 0.5)  # exploration weight
         # hyperparameter
-        self.MRDepthLimit = kwargs('MRDepthLimit', 2)
+        self.MRDepthLimit = kwargs.get('MRDepthLimit', 2)
 
     def get_my_rollout_action(self, node, data):
         return self.get_rollout_action(node, data)

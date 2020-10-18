@@ -22,10 +22,10 @@ class UcbLimitMCTSAgent(UcbMCTSAgent):
     def create_node(self, depth, game_data, action_space, agent_id, enemy_id, action, save_data=True):
         node = UcbMCTSAgent.create_node(self, depth, game_data, action_space, agent_id, enemy_id, action, save_data)
 
-        node.unseen_actions = self.get_valid_acions(game_data, agent_id, node.unseen_actions)
+        node.unseen_actions = self.get_valid_actions(game_data, agent_id, node.unseen_actions)
         return node
 
-    def get_valid_acions(self, game_data, agent_id, actions):
+    def get_valid_actions(self, game_data, agent_id, actions):
         # check valid actions
         valid_actions = []
         for agent in game_data.agents:
@@ -33,6 +33,9 @@ class UcbLimitMCTSAgent(UcbMCTSAgent):
                 if agent.is_alive:
                     valid_actions = EnvSimulator.get_valid_actions(game_data.board, game_data.flames, game_data.bombs, agent, actions)
                 else:
+                    valid_actions.append(constants.Action.Stop.value)
+                if len(valid_actions) == 0:
+                    #print(agent_id, 'good bye')
                     valid_actions.append(constants.Action.Stop.value)
                 return valid_actions
 

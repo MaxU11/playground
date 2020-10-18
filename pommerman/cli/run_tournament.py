@@ -36,28 +36,41 @@ from pommerman.agents import UcbMRMCTSAgent
 from pommerman.agents import UcbMRLimitMCTSAgent
 from pommerman.agents.abstract_mcts_skeleton import AbstractMCTSSkeleton
 
-def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, seed=None):
+def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, AllVsAll=True, seed=None):
     '''Wrapper to help start the game'''
     config = 'OneVsOne-v0'
-    record_pngs_dir = f'C:/tmp/Results/PNGS'
-    record_json_dir = f'C:/tmp/Results/JSON'
+    record_pngs_dir = None #f'C:/tmp/Results/PNGS'
+    record_json_dir = None #f'C:/tmp/Results/JSON'
     csv_dir = f'C:/tmp/Results/CSV'
     game_state_file = None
     render_mode = 'human'
     do_sleep = False
     render = False
 
+    if not os.path.isdir(csv_dir):
+        os.makedirs(csv_dir)
     game_details = [['p1','p2','result','winner','time','steps', 'add_info_p1', 'add_info_p2']]
+    write_csv_pos = 0
 
     duel_num = 0
-    total_duels = len(agent_pool1) * len(agent_pool2)
+    if AllVsAll:
+        total_duels = len(agent_pool1) * len(agent_pool2)
+    else:
+        total_duels = len(agent_pool1)
     game_num = 0
     total_games = total_duels * match_count * 2
+    p1_num = 0
     for p1_a in agent_pool1:
-        for p2_a in agent_pool2:
+        if AllVsAll:
+            tmp_agent_pool2 = agent_pool2
+        else:
+            tmp_agent_pool2 = [agent_pool2[p1_num]]
+        p1_num += 1
+        for p2_a in tmp_agent_pool2:
             duel_num += 1
-            print(f'Duel {duel_num}/{total_duels}')
+            print(f'Duel {duel_num}/{total_duels}: {p1_a[0]} vs {p2_a[0]}')
 
+            wins = ties = loss = 0
             for d in range(2):
                 if d == 0:
                     agents = [p1_a[1](**p1_a[2]), p2_a[1](**p2_a[2])]
@@ -74,9 +87,12 @@ def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, seed=
                 random.seed(seed)
                 env.seed(seed)
 
+                m_wins = m_ties = m_loss = 0
                 for i in range(match_count):
                     game_num += 1
 
+                    record_pngs_dir_ = None
+                    record_json_dir_ = None
                     if record_pngs_dir:
                         record_pngs_dir_ = f'{record_pngs_dir}/{tournament_name}/{agent_names[0]}_vs_{agent_names[1]}_{i+1}'
                     if record_json_dir:
@@ -88,6 +104,10 @@ def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, seed=
                     winner = -1
                     if info['result'] == constants.Result.Win:
                         winner = int(info['winners'][0])
+                        if winner == 0: m_wins += 1
+                        else: m_loss += 1
+                    else:
+                        m_ties += 1
 
                     agent_info_1 = {}
                     agent_info_2 = {}
@@ -100,16 +120,24 @@ def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, seed=
 
                     print(f"-- {game_num} / {total_games} Result: ", game_details[-1])
 
+                ties += m_ties
+                if d == 0:
+                    wins += m_wins
+                    loss += m_loss
+                else:
+                    wins += m_loss
+                    loss += m_wins
+
                 atexit.register(env.close)
 
-    if not os.path.isdir(csv_dir):
-        os.makedirs(csv_dir)
-    f = open(f'{csv_dir}/{tournament_name}.csv', 'w')
+            print(f'Result from {p1_a[0]} vs {p2_a[0]}: {wins} p1, {ties} ties, {loss} p2')
 
-    with f:
-        writer = csv.writer(f, delimiter=';')
-        for row in game_details:
-            writer.writerow(row)
+            f = open(f'{csv_dir}/{tournament_name}.csv', 'a')
+            with f:
+                writer = csv.writer(f, delimiter=';')
+                while write_csv_pos < len(game_details):
+                    writer.writerow(game_details[write_csv_pos])
+                    write_csv_pos += 1
 
 
 def run(env, agent_names, config, render, do_sleep, record_pngs_dir=None, record_json_dir=None):
@@ -165,61 +193,103 @@ def run_simple_vs_ucb():
     agent_simple = SimpleAgent
     agent_pool1.append(('SimpleAgent', agent_simple, {}))
 
-    for i in range(100):
-        agent_ucb = UcbMCTSAgent
+    iters = [1] + [(i+1) * 20 for i in range(5)]
+    for i in iters:
+        agent_ucb = UcbLimitMCTSAgent
         kwargs = {'expandTreeRollout': False,
-                  'maxIterations': i + 1,
+                  'maxIterations': i,
                   'maxTime': 0.0,
                   'discountFactor': 0.9999,
                   'depthLimit': None,
                   'C': 0.5}
         agent_pool2.append((
-                           f'AgentUCB_iter{kwargs["maxIterations"]}_df{kwargs["discountFactor"]}_dl{kwargs["depthLimit"]}_ex{kwargs["expandTreeRollout"]}_c{kwargs["C"]}',
+                           f'AgentUCBLimit_iter{kwargs["maxIterations"]}_df{kwargs["discountFactor"]}_dl{kwargs["depthLimit"]}_ex{kwargs["expandTreeRollout"]}_c{kwargs["C"]}',
                            agent_ucb, kwargs))
 
     # Tournament Settings
-    tournament_name = 'Simple_Against_UCB_' + datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
-    match_count = 10
+    tournament_name = 'Simple_Against_UCBLimit_' + datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
+    match_count = 50
 
     run_tournament(tournament_name, agent_pool1, agent_pool2, match_count)
 
 
-def run_ucb_depth_test():
+def run_ucb_rnd_vs_limit():
     agent_pool1 = []
     agent_pool2 = []
 
     # create agents
-    agent_ucb = UcbMCTSAgent
-    kwargs = {'expandTreeRollout': False,
-              'maxIterations': 20,
-              'maxTime': 0.0,
-              'discountFactor': 0.9999,
-              'depthLimit': None,
-              'C': 0.5}
-    agent_pool1.append((f'AgentUCB_iter{kwargs["maxIterations"]}_df{kwargs["discountFactor"]}_dl{kwargs["depthLimit"]}_ex{kwargs["expandTreeRollout"]}_c{kwargs["C"]}',
-                           agent_ucb, kwargs))
-
-    for i in range(50):
+    iters = [1] + [(i + 1) * 20 for i in range(5)]
+    for i in iters:
         agent_ucb = UcbMCTSAgent
         kwargs = {'expandTreeRollout': False,
-                  'maxIterations': 20,
+                  'maxIterations': i,
                   'maxTime': 0.0,
                   'discountFactor': 0.9999,
-                  'depthLimit': (50 - i),
+                  'depthLimit': None,
+                  'C': 0.5}
+        agent_pool1.append((
+            f'AgentUCB_iter{kwargs["maxIterations"]}_df{kwargs["discountFactor"]}_dl{kwargs["depthLimit"]}_ex{kwargs["expandTreeRollout"]}_c{kwargs["C"]}',
+            agent_ucb, kwargs))
+
+    for i in iters:
+        agent_ucb = UcbLimitMCTSAgent
+        kwargs = {'expandTreeRollout': False,
+                  'maxIterations': i,
+                  'maxTime': 0.0,
+                  'discountFactor': 0.9999,
+                  'depthLimit': None,
                   'C': 0.5}
         agent_pool2.append((
-                           f'AgentUCB_iter{kwargs["maxIterations"]}_df{kwargs["discountFactor"]}_dl{kwargs["depthLimit"]}_ex{kwargs["expandTreeRollout"]}_c{kwargs["C"]}',
-                           agent_ucb, kwargs))
+            f'AgentUCBLimit_iter{kwargs["maxIterations"]}_df{kwargs["discountFactor"]}_dl{kwargs["depthLimit"]}_ex{kwargs["expandTreeRollout"]}_c{kwargs["C"]}',
+            agent_ucb, kwargs))
 
     # Tournament Settings
     tournament_name = 'UCB_Depth_Limit_Test' + datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
     match_count = 10
 
-    run_tournament(tournament_name, agent_pool1, agent_pool2, match_count)
+    run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, False)
+
+
+def run_ucb_rnd_vs_mcts():
+    agent_pool1 = []
+    agent_pool2 = []
+
+    # create agents
+    iters = [1] + [(i + 1) * 20 for i in range(5)]
+    for i in iters:
+        agent_ucb = UcbMCTSAgent
+        kwargs = {'expandTreeRollout': False,
+                  'maxIterations': i,
+                  'maxTime': 0.0,
+                  'discountFactor': 0.9999,
+                  'depthLimit': None,
+                  'C': 0.5}
+        agent_pool1.append((
+            f'AgentUCB_iter{kwargs["maxIterations"]}_df{kwargs["discountFactor"]}_dl{kwargs["depthLimit"]}_ex{kwargs["expandTreeRollout"]}_c{kwargs["C"]}',
+            agent_ucb, kwargs))
+
+    for i in iters:
+        agent_ucb = UcbMRMCTSAgent
+        kwargs = {'expandTreeRollout': False,
+                  'maxIterations': 6,
+                  'maxTime': 0.0,
+                  'discountFactor': 0.9999,
+                  'depthLimit': 26,
+                  'C': 0.5,
+                  'MRDepthLimit': 2}
+        agent_pool2.append((
+            f'AgentUCBMRMCTS_iter{kwargs["maxIterations"]}_df{kwargs["discountFactor"]}_dl{kwargs["depthLimit"]}_ex{kwargs["expandTreeRollout"]}_c{kwargs["C"]}',
+            agent_ucb, kwargs))
+
+    # Tournament Settings
+    tournament_name = 'UCB_MR_VS_RND_Test' + datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
+    match_count = 10
+
+    run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, False)
 
 
 def main():
-    run_simple_vs_ucb()
+    run_ucb_rnd_vs_mcts()
 
 
 if __name__ == "__main__":

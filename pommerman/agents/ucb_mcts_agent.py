@@ -109,6 +109,10 @@ class UcbMCTSAgent(AbstractMCTSAgent):
             score = self.Q[child] / self.N[child]
             return score
 
+        if len(node.children) == 0:
+            print("No children available!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!?????", self.root)
+            return 0
+
         if node.agent_id == self.agent_id:
             return max(node.children, key=score)
         else:

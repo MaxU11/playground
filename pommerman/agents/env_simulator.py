@@ -181,15 +181,12 @@ class EnvSimulator:
         for action in actions:
             if action is constants.Action.Bomb.value:
                 if agent.ammo > 0: valid_actions.append(action)
-            elif action is constants.Action.Stop.value:
-                valid_actions.append(action)
             else:
                 if invalid_values is None:
                     invalid_values = [item.value for item in [constants.Item.Rigid, constants.Item.Wood]]
                     if not agent.can_kick: invalid_values.append(constants.Item.Bomb.value)
                 if invalid_positions is None:
                     invalid_positions = EnvSimulator.get_invalid_positions(board, flames, bombs)
-                valid_actions.append(action)
                 if EnvSimulator.is_valid_direction(board, row, col, action, invalid_values, invalid_positions):
                     valid_actions.append(action)
         return valid_actions
@@ -279,7 +276,8 @@ class EnvSimulator:
             return col + 1 < len(board[0]) and board[row][col + 1] not in invalid_values and (
             row, col + 1) not in invalid_positions
         elif constants.Action(direction) == constants.Action.Stop:
-            return True
+            return board[row][col] not in invalid_values and (
+                row, col) not in invalid_positions
 
         raise constants.InvalidAction("We did not receive a valid direction: ", direction)
 
