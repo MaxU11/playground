@@ -1,142 +1,73 @@
 from collections import deque
 from tqdm import tqdm
 
+from ..cli.Tournament import run_tournament
+from pommerman.agents.nn_mcts_agent import
+
 class Coach:
 
-    def __init__(self, *args, **kwargs):
-        pass
+    def __init__(self, nnet, updateThreshold, *args, **kwargs):
+        self.nnet = nnet
+        self.updateThreshold = updateThreshold
+        self.checkpoint_folder = 'c:\\tmp\\Model'
+        self.cur_iteration = 0
 
-    def make_training(self, numIters, numEps, numTrainExamplesHistory, threshold):
+    def make_training(self, numIters, numEps, numTrainExamplesHistory, threshold, df):
         nnet = self.initNNet()  # initialise random neural network
         trainExamplesHistory = []
         for i in range(numIters):
+            self.cur_iteration += 1
+
             for _ in tqdm(range(numEps), desc="Self Play"):
-                trainExamplesHistory.append(self.executeEpisode(nnet))  # collect examples from this game
+                trainExamplesHistory.append(self.executeEpisode(nnet, df))  # collect examples from this game
 
             if len(trainExamplesHistory) > numTrainExamplesHistory:
                 trainExamplesHistory.pop(0)
 
-            new_nnet = self.trainNNet(trainExamplesHistory)
-            frac_win = self.compare_nn(new_nnet, nnet)  # compare new net with previous net
-            if frac_win > threshold:
-                nnet = new_nnet  # replace with new net
+            prev_net = self.copyNNet(nnet)
+            self.trainNNet(nnet, trainExamplesHistory)
+            self.validate_nn(nnet, prev_net)
+
         return nnet
 
     def initNNet(self):
-        pass
+        return self.nnet
 
-    def executeEpisode(self, nnet):
-        pass
+    def executeEpisode(self, nnet, df):
+        agent_pool1 = []
+        agent_pool2 = []
+        match_count = 1
+        match_observations = run_tournament('tournament_name', agent_pool1, agent_pool2, match_count, False, False, True)
 
-    def trainNNet(self, examples):
-        pass
-
-    def compare_nn(self, nnet1, nnet2):
-        pass
-
-
-
-
-    def executeEpisode(game, nnet):
         examples = []
-        s = game.startState()
-        mcts = MCTS()  # initialise search tree
+        for observations, reward in match_observations:
+            for i in range(len(observations)):
+                examples.append((observations[-1 - i], reward))
+                reward *= df
 
-        while True:
-            for _ in range(numMCTSSims):
-                mcts.search(s, game, nnet)
-            examples.append([s, mcts.pi(s), None])  # rewards can not be determined yet
-            a = random.choice(len(mcts.pi(s)), p=mcts.pi(s))  # sample action from improved policy
-            s = game.nextState(s, a)
-            if game.gameEnded(s):
-                examples = assignRewards(examples, game.gameReward(s))
-                return examples
+        return examples
 
-    def learn(self):
+    def copyNNet(self, nnet):
+        nnet.save_checkpoint(folder=self.checkpoint_folder, filename='temp.pth.tar')
+        copy_nnet = nnet.__class__()
+        copy_nnet.load_checkpoint(folder=self.checkpoint_folder, filename='temp.pth.tar')
 
-        for i in range(1, self.args.numIters + 1):
-            # bookkeeping
-            print(f'Starting Iter #{i} ...')
-            # examples of the iteration
-            if not self.skipFirstSelfPlay or i > 1:
-                iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
+        return copy_nnet
 
-                for _ in tqdm(range(self.args.numEps), desc="Self Play"):
-                    self.mcts = MCTS(self.game, self.nnet, self.args)  # reset search tree
-                    iterationTrainExamples += self.executeEpisode()
+    def trainNNet(self, nnet, examples):
+        nnet.train(examples)
 
-                # save the iteration examples to the history
-                self.trainExamplesHistory.append(iterationTrainExamples)
+    def validate_nn(self, nnet, prev_nnet):
+        agent_pool1 = []
+        agent_pool2 = []
+        match_count = 100
+        wins, ties, loss = run_tournament('tournament_name', agent_pool1, agent_pool2, match_count, False, False, False)
 
-            if len(self.trainExamplesHistory) > self.args.numItersForTrainExamplesHistory:
-                log.warning(
-                    f"Removing the oldest entry in trainExamples. len(trainExamplesHistory) = {len(self.trainExamplesHistory)}")
-                self.trainExamplesHistory.pop(0)
-            # backup history to a file
-            # NB! the examples were collected using the model from the previous iteration, so (i-1)
-            self.saveTrainExamples(i - 1)
-
-            # shuffle examples before training
-            trainExamples = []
-            for e in self.trainExamplesHistory:
-                trainExamples.extend(e)
-            shuffle(trainExamples)
-
-            # training new network, keeping a copy of the old one
-            self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
-            self.pnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
-            pmcts = MCTS(self.game, self.pnet, self.args)
-
-            self.nnet.train(trainExamples)
-            nmcts = MCTS(self.game, self.nnet, self.args)
-
-            log.info('PITTING AGAINST PREVIOUS VERSION')
-            arena = Arena(lambda x: np.argmax(pmcts.getActionProb(x, temp=0)),
-                          lambda x: np.argmax(nmcts.getActionProb(x, temp=0)), self.game)
-            pwins, nwins, draws = arena.playGames(self.args.arenaCompare)
-
-            log.info('NEW/PREV WINS : %d / %d ; DRAWS : %d' % (nwins, pwins, draws))
-            if pwins + nwins == 0 or float(nwins) / (pwins + nwins) < self.args.updateThreshold:
-                log.info('REJECTING NEW MODEL')
-                self.nnet.load_checkpoint(folder=self.args.checkpoint, filename='temp.pth.tar')
-            else:
-                log.info('ACCEPTING NEW MODEL')
-                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=self.getCheckpointFile(i))
-                self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
-
-    def executeEpisode(self):
-        """
-        This function executes one episode of self-play, starting with player 1.
-        As the game is played, each turn is added as a training example to
-        trainExamples. The game is played till the game ends. After the game
-        ends, the outcome of the game is used to assign values to each example
-        in trainExamples.
-        It uses a temp=1 if episodeStep < tempThreshold, and thereafter
-        uses temp=0.
-        Returns:
-            trainExamples: a list of examples of the form (canonicalBoard, currPlayer, pi,v)
-                           pi is the MCTS informed policy vector, v is +1 if
-                           the player eventually won the game, else -1.
-        """
-        trainExamples = []
-        board = self.game.getInitBoard()
-        self.curPlayer = 1
-        episodeStep = 0
-
-        while True:
-            episodeStep += 1
-            canonicalBoard = self.game.getCanonicalForm(board, self.curPlayer)
-            temp = int(episodeStep < self.args.tempThreshold)
-
-            pi = self.mcts.getActionProb(canonicalBoard, temp=temp)
-            sym = self.game.getSymmetries(canonicalBoard, pi)
-            for b, p in sym:
-                trainExamples.append([b, self.curPlayer, p, None])
-
-            action = np.random.choice(len(pi), p=pi)
-            board, self.curPlayer = self.game.getNextState(board, self.curPlayer, action)
-
-            r = self.game.getGameEnded(board, self.curPlayer)
-
-            if r != 0:
-                return [(x[0], x[2], r * ((-1) ** (x[1] != self.curPlayer))) for x in trainExamples]
+        print(f'compare results: {wins} wins, {ties} ties, {loss} loss')
+        if wins + loss == 0 or float(wins) / (wins + loss) < self.updateThreshold:
+            print('REJECTING NEW MODEL')
+            nnet.load_checkpoint(folder=self.checkpoint_folder, filename='temp.pth.tar')
+        else:
+            print('ACCEPTING NEW MODEL')
+            nnet.save_checkpoint(folder=self.checkpoint_folder, filename='checkpoint_' + str(self.cur_iteration) + '.pth.tar')
+            nnet.save_checkpoint(folder=self.checkpoint_folder, filename='best.pth.tar')

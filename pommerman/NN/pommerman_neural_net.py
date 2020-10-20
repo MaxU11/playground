@@ -1,53 +1,67 @@
-import sys
-
-import argparse
+import os
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.autograd import Variable
 
 class PommermanNNet(nn.Module):
-    def __init__(self, game, args):
-        # game params
-        self.board_x, self.board_y = game.getBoardSize()
-        self.action_size = game.getActionSize()
-        self.args = args
 
+    def __init__(self):
         super(PommermanNNet, self).__init__()
-        self.conv1 = nn.Conv2d(1, args.num_channels, 3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(args.num_channels, args.num_channels, 3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(args.num_channels, args.num_channels, 3, stride=1)
-        self.conv4 = nn.Conv2d(args.num_channels, args.num_channels, 3, stride=1)
 
-        self.bn1 = nn.BatchNorm2d(args.num_channels)
-        self.bn2 = nn.BatchNorm2d(args.num_channels)
-        self.bn3 = nn.BatchNorm2d(args.num_channels)
-        self.bn4 = nn.BatchNorm2d(args.num_channels)
+        self.optim = torch.optim.Adam(self.parameters(), lr=0.00005)
 
-        self.fc1 = nn.Linear(args.num_channels*(self.board_x-4)*(self.board_y-4), 1024)
-        self.fc_bn1 = nn.BatchNorm1d(1024)
+        self.conv1 = initConvLayer(4, 12)
+        self.conv2 = initConvLayer(12, 24)
+        self.conv3 = initConvLayer(24, 36)
+        self.conv4 = initConvLayer(36, 36)
+        self.conv5 = initConvLayer(36, 48)
 
-        self.fc2 = nn.Linear(1024, 512)
-        self.fc_bn2 = nn.BatchNorm1d(512)
+        self.dense = nn.Sequential(
+            nn.Linear(720, 256),
+            nn.ReLU(),
+            nn.Linear(256, 256),
+            nn.ReLU(),
+            nn.Linear(256, 6)
+        )
 
-        self.fc3 = nn.Linear(512, self.action_size)
+    # Applies forward propagation to the inputs
+    def forward(self, frameStack):
+        out = self.conv1(frameStack)
+        out = self.conv2(out)
+        out = self.conv3(out)
+        out = self.conv4(out)
+        out = self.conv5(out)
+        out = self.dense(out.view(out.size(0), -1))
 
-        self.fc4 = nn.Linear(512, 1)
+        return torch.softmax(out, dim=-1)
 
-    def forward(self, s):
-        #                                                           s: batch_size x board_x x board_y
-        s = s.view(-1, 1, self.board_x, self.board_y)                # batch_size x 1 x board_x x board_y
-        s = F.relu(self.bn1(self.conv1(s)))                          # batch_size x num_channels x board_x x board_y
-        s = F.relu(self.bn2(self.conv2(s)))                          # batch_size x num_channels x board_x x board_y
-        s = F.relu(self.bn3(self.conv3(s)))                          # batch_size x num_channels x (board_x-2) x (board_y-2)
-        s = F.relu(self.bn4(self.conv4(s)))                          # batch_size x num_channels x (board_x-4) x (board_y-4)
-        s = s.view(-1, self.args.num_channels*(self.board_x-4)*(self.board_y-4))
+    def save_current_state(self, folder, filename) -> None:
+        state = {
+            'actor_critic': self.state_dict(),
+            'optim': self.optim.state_dict()
+        }
+        try:
+            torch.save(state, os.path.join(folder, filename))
+        except:
+            print("Nice little exception...")
 
-        s = F.dropout(F.relu(self.fc_bn1(self.fc1(s))), p=self.args.dropout, training=self.training)  # batch_size x 1024
-        s = F.dropout(F.relu(self.fc_bn2(self.fc2(s))), p=self.args.dropout, training=self.training)  # batch_size x 512
+    def load_current_state(self, folder, filename) -> None:
+        path = os.path.join(folder, filename)
+        if os.path.isfile(path):
+            chkpt = torch.load(path)
+            self.actor_critic.load_state_dict(chkpt['actor_critic'])
+            self.optim.load_state_dict(chkpt['optim'])
 
-        pi = self.fc3(s)                                                                         # batch_size x action_size
-        v = self.fc4(s)                                                                          # batch_size x 1
+            print("Loaded ", path)
+        else:
+            print("No checkpoint found")
 
-        return F.log_softmax(pi, dim=1), torch.tanh(v)
+def initConv2D(in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False):
+    conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias)
+    nn.init.xavier_uniform_(conv.weight)
+    return conv
+
+def initConvLayer(in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False):
+    return nn.Sequential(
+        initConv2D(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias),
+        nn.ReLU(),
+        nn.MaxPool2d(2, 2))
