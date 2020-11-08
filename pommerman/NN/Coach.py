@@ -1,8 +1,10 @@
 from collections import deque
 from tqdm import tqdm
+from random import shuffle
 
 from ..cli.Tournament import run_tournament
-from pommerman.agents.nn_mcts_agent import
+from ..cli.Tournament import run_single_match
+from pommerman.agents.nn_mcts_agent import NN_Agent
 
 class Coach:
 
@@ -11,6 +13,15 @@ class Coach:
         self.updateThreshold = updateThreshold
         self.checkpoint_folder = 'c:\\tmp\\Model'
         self.cur_iteration = 0
+
+        # Agnets hyperparameter
+        self.a_kwds = {'expandTreeRollout': False,
+                       'maxIterations': 1000,
+                       'maxTime': 0.1,
+                       'discountFactor': 0.9999,
+                       'depthLimit': 26,
+                       'C': 0.5,
+                       'temp': 1}
 
     def make_training(self, numIters, numEps, numTrainExamplesHistory, threshold, df):
         nnet = self.initNNet()  # initialise random neural network
@@ -24,8 +35,13 @@ class Coach:
             if len(trainExamplesHistory) > numTrainExamplesHistory:
                 trainExamplesHistory.pop(0)
 
+            trainExamples = []
+            for e in self.trainExamplesHistory:
+                trainExamples.extend(e)
+            shuffle(trainExamples)
+
             prev_net = self.copyNNet(nnet)
-            self.trainNNet(nnet, trainExamplesHistory)
+            self.trainNNet(nnet, trainExamples)
             self.validate_nn(nnet, prev_net)
 
         return nnet
@@ -34,18 +50,29 @@ class Coach:
         return self.nnet
 
     def executeEpisode(self, nnet, df):
-        agent_pool1 = []
-        agent_pool2 = []
-        match_count = 1
-        match_observations = run_tournament('tournament_name', agent_pool1, agent_pool2, match_count, False, False, True)
+        agent1 = NN_Agent(nnet)
+        agent2 = NN_Agent(nnet)
 
-        examples = []
-        for observations, reward in match_observations:
-            for i in range(len(observations)):
-                examples.append((observations[-1 - i], reward))
-                reward *= df
+        reward = run_single_match(agent1, agent2)
 
-        return examples
+        trainExamples_p1 = agent1.trainExamples
+        trainExamples_p2 = agent1.trainExamples
+
+        if (len(trainExamples_p1) != len(trainExamples_p2)):
+            raise ValueError('obs should have same amount.')
+        if (len(trainExamples_p1) % 4) != 0:
+            raise ValueError('invalid obs length')
+
+        r1 = reward[0]
+        r2 = reward[1]
+        for i in reversed(range(len(trainExamples_p1))):
+            if i > 0 and i % 4 == 0:
+                r1 *= df
+                r2 *= df
+            trainExamples_p1[i] = r1
+            trainExamples_p2[i] = r2
+
+        return trainExamples_p1 + trainExamples_p2
 
     def copyNNet(self, nnet):
         nnet.save_checkpoint(folder=self.checkpoint_folder, filename='temp.pth.tar')
@@ -58,9 +85,9 @@ class Coach:
         nnet.train(examples)
 
     def validate_nn(self, nnet, prev_nnet):
-        agent_pool1 = []
-        agent_pool2 = []
-        match_count = 100
+        agent_pool1 = [NN_Agent(nnet, **self.a_kwds)]
+        agent_pool2 = [NN_Agent(prev_nnet, **self.a_kwds)]
+        match_count = 50
         wins, ties, loss = run_tournament('tournament_name', agent_pool1, agent_pool2, match_count, False, False, False)
 
         print(f'compare results: {wins} wins, {ties} ties, {loss} loss')

@@ -11,8 +11,6 @@ from .env_simulator import EnvSimulator
 class UcbMCTSAgent(AbstractMCTSAgent):
     """The UCB-MCTS Agent."""
 
-    root = None
-
     def __init__(self, *args, **kwargs):
         super(UcbMCTSAgent, self).__init__(*args, **kwargs)
         # parent hyperparameter
@@ -91,7 +89,7 @@ class UcbMCTSAgent(AbstractMCTSAgent):
                     reward += 0.5
         return reward
 
-    def update_stats(self, node, result):
+    def update_stats(self, node, action, result):
         # get updated node stats
         self.N[node] += 1
         self.Q[node] += result

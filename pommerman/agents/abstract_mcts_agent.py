@@ -98,14 +98,17 @@ class AbstractMCTSAgent(AbstractMCTSSkeleton):
     def rollout_policy(self, node, data):
         # get next node based on rollout policy
         actions = {}
+        first_a = None
         if node.agent_id != self.agent_id:
             actions[self.agent_id] = node.action
         else:
-            actions[self.agent_id] = self.get_my_rollout_action(node, data)
+            actions[self.agent_id] = first_a = self.get_my_rollout_action(node, data)
             if self.expandTreeRollout: node = node.expand(actions[self.agent_id], data, self)
             else: node = self.create_node(node.depth + 1, data, node.action_space, self.enemies[0].value - 10, self.agent_id, actions[self.agent_id], False)
 
         actions[self.enemies[0].value - 10] = self.get_enemy_rollout_action(node, data)
+        if not first_a:
+            first_a = actions[self.enemies[0].value - 10]
 
         EnvSimulator.act(data, actions)
         #print(actions, '\n', data.board)
@@ -113,7 +116,7 @@ class AbstractMCTSAgent(AbstractMCTSSkeleton):
         if self.expandTreeRollout: new_node = node.expand(actions[self.enemies[0].value - 10], data, self)
         else: new_node = self.create_node(node.depth + 1, data, node.action_space, self.agent_id, self.enemies[0].value - 10, actions[self.enemies[0].value - 10], False)
 
-        return new_node, data
+        return new_node, data, first_a
 
     @abstractmethod
     def get_my_rollout_action(self, node, data):

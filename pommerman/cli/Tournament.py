@@ -12,7 +12,7 @@ from pommerman import constants
 from pommerman import make
 
 
-def run(env, agent_names, config, render, do_sleep, is_swapped, record_pngs_dir=None, record_json_dir=None):
+def run(env, agent_names, config, render, do_sleep, record_pngs_dir=None, record_json_dir=None):
     '''Runs a game'''
     if record_pngs_dir and not os.path.isdir(record_pngs_dir):
         os.makedirs(record_pngs_dir)
@@ -130,7 +130,7 @@ def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, AllVs
                         record_json_dir_ = f'{record_json_dir}/{tournament_name}/{agent_names[0]}_vs_{agent_names[1]}_{i+1}'
 
                     start = time.time()
-                    info, steps, observations, reward = run(env, agent_names, config, render, do_sleep, d==1, record_pngs_dir_, record_json_dir_)
+                    info, steps, observations, reward = run(env, agent_names, config, render, do_sleep, record_pngs_dir_, record_json_dir_)
 
                     if match_observations:
                         match_observations.append((observations, reward))
@@ -182,3 +182,30 @@ def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, AllVs
         return match_observations
     else:
         return tot_wins, tot_tie, tot_loss
+
+def run_single_match(agent1, agent2, seed=None):
+    '''Wrapper to help start the game'''
+    config = 'OneVsOne-v0'
+    record_pngs_dir = None #f'C:/tmp/Results/PNGS'
+    record_json_dir = None #f'C:/tmp/Results/JSON'
+    game_state_file = None
+    render_mode = 'human'
+    do_sleep = False
+    render = False
+
+    agents = [agent1, agent2]
+
+    env = make(config, agents, game_state_file, render_mode=render_mode)
+    if seed is None:
+        # Pick a random seed between 0 and 2^31 - 1
+        seed = random.randint(0, np.iinfo(np.int32).max)
+    np.random.seed(seed)
+    random.seed(seed)
+    env.seed(seed)
+
+    record_pngs_dir_ = None
+    record_json_dir_ = None
+
+    info, steps, observations, reward = run(env, None, config, render, do_sleep, record_pngs_dir_, record_json_dir_)
+    atexit.register(env.close)
+    return reward
