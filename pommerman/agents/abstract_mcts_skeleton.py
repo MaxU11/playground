@@ -27,7 +27,7 @@ class AbstractMCTSSkeleton(ABC, BaseAgent):
         self._character.reset()
 
     def act(self, obs, action_space):
-        self.action_space = action_space
+        self.action_space = action_space.n
 
         start_t = datetime.datetime.now()
         iterations = 0
@@ -53,7 +53,7 @@ class AbstractMCTSSkeleton(ABC, BaseAgent):
 
     # function for node traversal
     def traverse(self, node):
-        while node.fully_expanded():
+        while self.node_fully_expanded(node):
             node = self.get_selected_child(node)
 
         if self.non_terminal_traverse(node):
@@ -96,6 +96,10 @@ class AbstractMCTSSkeleton(ABC, BaseAgent):
 
     def non_terminal_rollout(self, node):
         return self.non_terminal(node)
+
+    @abstractmethod
+    def node_fully_expanded(self, node):
+        raise NotImplementedError()
 
     @abstractmethod
     def agent_reset(self):

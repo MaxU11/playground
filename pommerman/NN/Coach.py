@@ -8,31 +8,37 @@ from pommerman.agents.nn_mcts_agent import NN_Agent
 
 class Coach:
 
-    def __init__(self, nnet, updateThreshold, *args, **kwargs):
+    def __init__(self, nnet, args):
         self.nnet = nnet
-        self.updateThreshold = updateThreshold
-        self.checkpoint_folder = 'c:\\tmp\\Model'
+        self.updateThreshold = args.get('updateThreshold', 0.6)
+        self.checkpoint_folder = args.get('checkpoint_folder', 'c:\\tmp\\Model')
+
+        self.numTrainExamplesHistory = args.get('numTrainExamplesHistory', 20)
+        self.maxlenOfQueue = args.get('maxlenOfQueue', 200000)
+        self.df = args.get('df', 1.0)
+
         self.cur_iteration = 0
+        self.args = args
 
         # Agnets hyperparameter
-        self.a_kwds = {'expandTreeRollout': False,
-                       'maxIterations': 1000,
-                       'maxTime': 0.1,
-                       'discountFactor': 0.9999,
-                       'depthLimit': 26,
-                       'C': 0.5,
-                       'temp': 1}
+        self.a_kwds = {'expandTreeRollout': args.get('expandTreeRollout', False),
+                       'maxIterations': args.get('maxIterations', 1000),
+                       'maxTime': args.get('maxTime', 0.0),
+                       'discountFactor': args.get('discountFactor', 0.9999),
+                       'depthLimit': args.get('depthLimit', 26),
+                       'C': args.get('C', 0.5),
+                       'temp': args.get('temp', 1)}
 
-    def make_training(self, numIters, numEps, numTrainExamplesHistory, threshold, df):
+    def make_training(self, numIters, numEps):
         nnet = self.initNNet()  # initialise random neural network
-        trainExamplesHistory = []
+        trainExamplesHistory = deque([], maxlen=self.maxlenOfQueue)
         for i in range(numIters):
             self.cur_iteration += 1
 
             for _ in tqdm(range(numEps), desc="Self Play"):
-                trainExamplesHistory.append(self.executeEpisode(nnet, df))  # collect examples from this game
+                trainExamplesHistory.append(self.executeEpisode(nnet, self.df))  # collect examples from this game
 
-            if len(trainExamplesHistory) > numTrainExamplesHistory:
+            if len(trainExamplesHistory) > self.numTrainExamplesHistory:
                 trainExamplesHistory.pop(0)
 
             trainExamples = []
@@ -50,8 +56,8 @@ class Coach:
         return self.nnet
 
     def executeEpisode(self, nnet, df):
-        agent1 = NN_Agent(nnet)
-        agent2 = NN_Agent(nnet)
+        agent1 = NN_Agent(nnet, **self.a_kwds)
+        agent2 = NN_Agent(nnet, **self.a_kwds)
 
         reward = run_single_match(agent1, agent2)
 
@@ -82,7 +88,7 @@ class Coach:
         return copy_nnet
 
     def trainNNet(self, nnet, examples):
-        nnet.train(examples)
+        nnet.make_train(examples)
 
     def validate_nn(self, nnet, prev_nnet):
         agent_pool1 = [NN_Agent(nnet, **self.a_kwds)]

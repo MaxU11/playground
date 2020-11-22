@@ -75,11 +75,17 @@ class AbstractMCTSAgent(AbstractMCTSSkeleton):
         # pick unvisited child
         if node.agent_id == self.agent_id:
             action = self.get_my_expand_action(node)
-            node = node.expand(action, game_data, self)
+            node = self.expand_node(node, game_data, action)
 
         action = self.get_enemy_expand_action(node)
-        EnvSimulator.act(game_data, {node.enemy_id: node.action, node.agent_id: action})
-        return node.expand(action, game_data, self)
+        return self.expand_node(node, game_data, action)
+
+    def expand_node(self, node, game_data, action):
+        if node.agent_id == self.agent_id:
+            return node.expand(action, game_data, self)
+        else:
+            EnvSimulator.act(game_data, {node.enemy_id: node.action, node.agent_id: action})
+            return node.expand(action, game_data, self)
 
     @abstractmethod
     def get_my_expand_action(self, node):
@@ -189,6 +195,9 @@ class AbstractMCTSAgent(AbstractMCTSSkeleton):
         info = self.get_tree_info(root)
         with open(path, 'w') as f:
             f.write(info)
+
+    def node_fully_expanded(self, node):
+        return node.fully_expanded()
 
 class Node():
 
