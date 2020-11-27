@@ -1,6 +1,8 @@
 '''The MCTS skeleton'''
 
 import math
+import random
+import datetime
 
 from .abstract_mcts_agent import AbstractMCTSAgent
 from .abstract_mcts_skeleton import AbstractMCTSSkeleton
@@ -28,15 +30,20 @@ class NN_Agent(AbstractMCTSAgent):
         self.depthLimit = kwargs.get('depthLimit', 26)
         self.C = kwargs.get('C', 0.5) # exploration weight
         self.temp = kwargs.get('temp', 1)
-        self.stopSelection = False
 
+        self.stopSelection = False
         self.Qsa = {}  # stores Q values for s,a
         self.Nsa = {}  # stores #times edge s,a was visited
         self.Ns = {}  # stores #times board s was visited
         self.Ps = {}  # stores initial policy (returned by neural net)
+        self.V = {} # stores the values (returned by neural net)
 
         #self.Es = {}  # stores game.getGameEnded ended for board s
         self.Vs = {}  # stores game.getValidMoves for board s
+
+        self.c_board = {}
+        self.trainExamples = []
+        self.last_reward = 0
 
     def agent_reset(self):
         self.Qsa = {}  # stores Q values for s,a (as defined in the paper)
@@ -46,9 +53,14 @@ class NN_Agent(AbstractMCTSAgent):
 
         #self.Es = {}  # stores game.getGameEnded ended for board s
         self.Vs = {}  # stores game.getValidMoves for board s
+
+        self.c_board = {}
+        self.trainExamples = []
+        self.last_reward = 0
+
+        self.start_t = None
         AbstractMCTSAgent.agent_reset(self)
 
-        self.trainExamples = []
 
     def root_changed(self, root):
         pass
@@ -64,84 +76,111 @@ class NN_Agent(AbstractMCTSAgent):
         s, c_board = self.get_canonical_board_str(self.root, self.root.agent_id)
         data = self.get_data(self.root)
         r = self.get_reward(self.root, data)
-        a_probs = self.getActionProb(s)
 
-        self.add_train_example(c_board, a_probs, r)
+        if not self.root.done:
+            a_probs = self.getActionProb(s)
+            self.add_train_example(c_board, a_probs, r)
+            action = np.random.choice(len(a_probs), p=a_probs)
+        else:
+            action = 0
 
-        action = np.random.choice(len(a_probs), p=a_probs)
         return action
 
     def get_sym_boards(self, s, a_probs):
         sym = []
-        p = np.array([a_probs[1], a_probs[3], a_probs[2], a_probs[4]])
+        p = np.array([[None, a_probs[1], None], [a_probs[3], None, a_probs[4]], [None, a_probs[2], None]])
         for i in range(4):
             s = np.rot90(s)
             p = np.rot90(p)
             sf = np.flip(s, 0)
             pf = np.flip(p, 0)
-            sym.append((s, np.array([p[0], p[1], p[3], p[2], p[4], p[5]])))
-            sym.append((sf, np.array([pf[0], pf[1], pf[3], pf[2], pf[4], pf[5]])))
+            sym.append((s, np.array([a_probs[0], p[0][1], p[2][1], p[1][0], p[1][2], a_probs[5]])))
+            sym.append((sf, np.array([a_probs[0], pf[0][1], pf[2][1], pf[1][0], pf[1][2], a_probs[5]])))
         return sym
+
+    def create_node(self, depth, game_data, action_space, agent_id, enemy_id, action, save_data=True):
+        node = AbstractMCTSAgent.create_node(self, depth, game_data, action_space, agent_id, enemy_id, action, save_data)
+
+        s, c_board = self.get_canonical_board_str(node, node.agent_id)
+
+        if s not in self.Ns: # initialize?
+            valids = self.get_valid_actions(game_data, node.agent_id)
+            self.Vs[s] = valids
+
+            nn_input = self.nnet.get_nn_input(c_board)
+            p, v = self.nnet.predict(nn_input)
+
+            valids = self.Vs[s]
+            p = p * valids  # masking invalid moves
+
+            sum_Ps_s = np.sum(p)
+            if sum_Ps_s > 0:
+                p /= sum_Ps_s  # renormalize
+            else:
+                print("All valid moves were masked, doing a workaround. Overfitting?")
+                p = s + valids
+                p /= np.sum(p)
+
+            self.Ps[s] = p
+            self.V[s] = v
+            self.Ns[s] = 0
+        else:
+            valids = self.Vs[s]
+
+        node.unseen_actions = [a for a in range(self.action_space) if valids[a]]
+        return node
+
+    def get_selected_child(self, node):
+        # select child for traversing using UCB
+        action = self.get_ucb_action(node)
+        return node.children[action]
 
     def get_ucb_action(self, node):
         s, _ = self.get_canonical_board_str(node, node.agent_id)
         valids = self.Vs[s]
 
-        a_s = []
-        ucp_val = []
+        a_best_v = 0
+        ucp_val_v = -float('inf')
+        a_best_c = 0
+        ucp_val_c = -float('inf')
         for a in range(self.action_space):
             if valids[a]:
                 if (s, a) in self.Qsa:
                     v = self.Qsa[(s, a)]
                     cpar = self.C * self.Ps[s][a] * math.sqrt(self.Ns[s]) / (1 + self.Nsa[(s, a)])
                 else:
-                    v = 0
+                    a_best_v = None
+                    ucp_val_v = None
                     cpar = self.C * self.Ps[s][a] * math.sqrt(self.Ns[s] + EPS)
 
-                if node.agent_id is self.agent_id:
-                    a_s.append(a)
-                    ucp_val.append(v + cpar)
-                else:
-                    a_s.append(a)
-                    ucp_val.append(v - cpar)
+                if ucp_val_v is not None and (v + cpar) > ucp_val_v:
+                    a_best_v = a
+                    ucp_val_v = (v + cpar)
+                if cpar > ucp_val_c:
+                    a_best_c = a
+                    ucp_val_c = cpar
 
-        if node.agent_id is self.agent_id:
-            return a_s[ucp_val.index(max(ucp_val))]
+        if a_best_v is not None:
+            return a_best_v
         else:
-            return a_s[ucp_val.index(min(ucp_val))]
-
-    def node_fully_expanded(self, node):
-        if self.stopSelection:
-            self.stopSelection = False
-            return False
-
-        s, _ = self.get_canonical_board_str(node, node.agent_id)
-        return (s in self.Ps)
-
-    def non_terminal_traverse(self, node):
-        # nn agent will evaluate selected child directly
-        return False
+            return a_best_c
 
     def non_terminal_rollout(self, node):
         # nn agent will evaluate selected child directly
         return False
 
-    def get_selected_child(self, node):
-        # select child for traversing using UCB
-        action = self.get_ucb_action(node)
+    def non_terminal(self, node):
+        # check if node is terminal
+        if self.depthLimit and (node.depth - self.root.depth) >= self.depthLimit:
+            return False
 
-        if not action in node.children:
-            game_data = self.get_data(node)
-            self.expand_node(node, game_data, action)
-            self.stopSelection = True
-
-        return node.children[action]
+        return AbstractMCTSAgent.non_terminal(self, node)
 
     def get_my_expand_action(self, node):
-        raise ValueError('should do no expand')
+        return random.choice(node.unseen_actions)
 
     def get_enemy_expand_action(self, node):
-        raise ValueError('should do no expand')
+        return random.choice(node.unseen_actions)
 
     def get_my_rollout_action(self, node, data):
         raise ValueError('should do no rollout')
@@ -153,61 +192,65 @@ class NN_Agent(AbstractMCTSAgent):
         if node.done:
             return self.get_reward(node, data)
 
-        s, c_board = self.get_canonical_board_str(node, node.agent_id)
-        nn_input = self.get_nn_input(c_board)
-        self.Ps[s], v = self.nnet.predict(nn_input)
+        s, _ = self.get_canonical_board_str(node, node.agent_id)
+        v = self.V[s]
 
-        if s in self.Vs:
-            valids = self.Vs[s]
-        else:
-            valids = self.get_valid_actions(data, node.agent_id)
-        self.Ps[s] = self.Ps[s] * valids  # masking invalid moves
-
-        sum_Ps_s = np.sum(self.Ps[s])
-        if sum_Ps_s > 0:
-            self.Ps[s] /= sum_Ps_s  # renormalize
-        else:
-            # if all valid moves were masked make all valid moves equally probable
-            # NB! All valid moves may be masked if either your NNet architecture is insufficient or you've get overfitting or something else.
-            # If you have got dozens or hundreds of these messages you should pay attention to your NNet and/or training process.
-            print("All valid moves were masked, doing a workaround.")
-            self.Ps[s] = self.Ps[s] + valids
-            self.Ps[s] /= np.sum(self.Ps[s])
-
-        self.Vs[s] = valids
-        self.Ns[s] = 0
-        return v
+        return [v, None]
 
     def get_reward(self, node, data):
+        if node.agent_id != self.agent_id:
+            raise ValueError('why reward from enemy?')
+
         # get reward from terminal node
         reward = 0.0
         alive = EnvSimulator.get_alive(data)
+        me_alive = False
+        enemy_alive = False
         for a in alive:
             if a == self.agent_id:
-                if alive[a]:
-                    reward += 1.0
-                else:
-                    reward += -1.0
+                me_alive = alive[a]
             else:
-                if alive[a]:
-                    reward += -0.5
-                else:
-                    reward += 0.5
+                enemy_alive = alive[a]
+
+        if me_alive and enemy_alive:
+            reward = [0, 0]
+        elif me_alive and not enemy_alive:
+            reward = [1, -1]
+        elif not me_alive and enemy_alive:
+            reward = [-1, 1]
+        elif not me_alive and not enemy_alive:
+            reward = [-1, -1]
+
         return reward
 
     def update_stats(self, node, action, result):
-        s, c_board = self.get_canonical_board_str(node, node.agent_id)
+        if not node.done and action is not None: # action is none for expanded node -> we store Q(s, a) -> skip leaf node
+            s, c_board = self.get_canonical_board_str(node, node.agent_id)
 
-        # get updated node stats
-        if (s, action) in self.Qsa:
-            self.Qsa[(s, action)] = (self.Nsa[(s, action)] * self.Qsa[(s, action)] + result) / (self.Nsa[(s, action)] + 1)
-            self.Nsa[(s, action)] += 1
-        else:
-            self.Qsa[(s, action)] = result
-            self.Nsa[(s, action)] = 1
+            if node.agent_id == self.agent_id:
+                r = result[0]
+            else:
+                r = result[1]
 
-        self.Ns[s] += 1
-        return result * self.discountFactor
+            if r != None:
+                # get updated node stats
+                if (s, action) in self.Qsa:
+                    self.Qsa[(s, action)] = (self.Nsa[(s, action)] * self.Qsa[(s, action)] + r) / (self.Nsa[(s, action)] + 1)
+                    self.Nsa[(s, action)] += 1
+                else:
+                    self.Qsa[(s, action)] = r
+                    self.Nsa[(s, action)] = 1
+
+                self.Ns[s] += 1
+
+                if node.agent_id == self.agent_id:
+                    result[0] *= self.discountFactor
+                else:
+                    result[1] *= self.discountFactor
+            else:
+                result[1] = self.V[s]
+
+        return result
 
     def best_child(self, node):
         return 0
@@ -220,30 +263,16 @@ class NN_Agent(AbstractMCTSAgent):
 
         return probs
 
-    def get_nn_input(self, c_board):
-        rigid_layer = self.binary_filter(c_board, 0)
-        wood_layer = self.binary_filter(c_board, 1)
-        item_layer = self.binary_filter(c_board, 2)
-        me_layer = self.binary_filter(c_board, 3)
-        enemy_layer = self.binary_filter(c_board, 4)
-        blife_layer = self.binary_filter(c_board, 5, 4)
-        bstrength_layer = self.binary_filter(c_board, 9, 3)
-        flames_layer = self.binary_filter(c_board, 12, 2)
-        return np.array([rigid_layer, wood_layer, item_layer, me_layer, enemy_layer, blife_layer, bstrength_layer, flames_layer])
-
-    def binary_filter(self, layer, pos, l=1):
-        n = ((2 ** l) - 1) << pos
-        mask = np.ones(layer.shape, dtype=np.int32) * n
-        ml = np.bitwise_and(layer, mask)
-        return np.right_shift(ml, pos)
-
     def get_canonical_board_str(self, node, agent_id):
+        if node in self.c_board:
+            return self.c_board[node]
         c_board = self.get_canonical_board(node, agent_id)
         str_rep = ""
         for row in range(c_board.shape[0]):
             for col in range(c_board.shape[1]):
                 str_rep += str(c_board[row, col]) + ','
             str_rep += '\n'
+        self.c_board[node] = (str_rep, c_board)
         return str_rep, c_board
 
     def get_canonical_board(self, node, agent_id):

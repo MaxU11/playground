@@ -75,12 +75,12 @@ class AbstractMCTSAgent(AbstractMCTSSkeleton):
         # pick unvisited child
         if node.agent_id == self.agent_id:
             action = self.get_my_expand_action(node)
-            node = self.expand_node(node, game_data, action)
+            node = self.make_expand_node(node, game_data, action)
 
         action = self.get_enemy_expand_action(node)
-        return self.expand_node(node, game_data, action)
+        return self.make_expand_node(node, game_data, action)
 
-    def expand_node(self, node, game_data, action):
+    def make_expand_node(self, node, game_data, action):
         if node.agent_id == self.agent_id:
             return node.expand(action, game_data, self)
         else:

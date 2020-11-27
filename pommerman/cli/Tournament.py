@@ -37,7 +37,7 @@ def run(env, agent_names, config, render, do_sleep, record_pngs_dir=None, record
         actions = env.act(obs)
         steps += 1
         obs, reward, done, info = env.step(actions)
-        if reward > 0 and done == False:
+        if max(reward) > 0 and done is False:
             raise ValueError('Why?????????????????????')
         observations.append(obs)
 

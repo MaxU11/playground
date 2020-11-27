@@ -33,17 +33,19 @@ class AbstractMCTSSkeleton(ABC, BaseAgent):
         iterations = 0
         self._actNum += 1
 
+        #start_t2 = datetime.datetime.now()
         root = self.get_root(obs, action_space)
         while self.is_search_active():
             iterations += 1
             leaf = self.traverse(root)
             simulation_result, leaf, leaf_a = self.rollout(leaf)
-            self.backpropagate(leaf, leaf_a, simulation_result)
+            deep = self.backpropagate(leaf, leaf_a, simulation_result)
+        #print(f'Gesamt {datetime.datetime.now() - start_t2}')
 
         #self.search_finished()
 
-        if len(root.children) == 0:
-            print('no children!!!!', iterations, root.done, root.depth)
+        #if len(root.children) == 0:
+        #    print('no children!!!!', iterations, root.done, root.depth)
 
         a = self.best_child(root)
         time_diff = datetime.datetime.now() - start_t
@@ -82,10 +84,17 @@ class AbstractMCTSSkeleton(ABC, BaseAgent):
 
     # function for backpropagation
     def backpropagate(self, node, action, result):
-        result = self.update_stats(node, action, result)
-        if node.is_root():
-            return
-        self.backpropagate(node.parent, node.action, result)
+        cur_n = node
+        cur_a = action
+        i = 0
+        while cur_n != None:
+            result = self.update_stats(cur_n, cur_a, result)
+            if cur_n.is_root():
+                return i
+            cur_a = cur_n.action
+            cur_n = cur_n.parent
+            i += 1
+        return i
 
     def get_agent_info(self, info):
         info['avgTime'] = self._avgTime
