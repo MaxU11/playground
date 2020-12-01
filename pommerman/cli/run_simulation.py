@@ -5,6 +5,7 @@ def main():
     '''CLI entry pointed used to bootstrap a battle'''
     agent_ucb = 'test::agents.UcbMCTSAgent'
     agent_ucblimit = 'test::agents.UcbLimitMCTSAgent'
+    agent_nn = 'test::agents.NN_Agent'
     agent_ucbmr = 'test::agents.UcbMRMCTSAgent'
     agent_ucbmrlimit = 'test::agents.UcbMRLimitMCTSAgent'
     agent_simple = 'test::agents.SimpleAgent'
@@ -19,7 +20,7 @@ def main():
         'configs.py for options.')
     parser.add_argument(
         '--agents',
-        default=','.join([agent_ucblimit] + [agent_ucblimit]),
+        default=','.join([agent_nn] + [agent_nn]),
         # default=','.join([player_agent] + [simple_agent]*3]),
         # default=','.join([docker_agent] + [simple_agent]*3]),
         help='Comma delineated list of agent types and docker '

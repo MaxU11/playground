@@ -14,13 +14,18 @@ python run_battle.py --agents=player::arrows,docker::pommerman/test-agent,random
 """
 from datetime import datetime
 
-from .Tournament import run_tournament
+from pommerman.cli.Tournament import run_tournament
+from pommerman.cli.Tournament import run_single_match
 
 from pommerman.agents import SimpleAgent
 from pommerman.agents import UcbMCTSAgent
 from pommerman.agents import UcbLimitMCTSAgent
 from pommerman.agents import UcbMRMCTSAgent
 from pommerman.agents import UcbMRLimitMCTSAgent
+from pommerman.agents import NN_Agent
+
+from pommerman.NN.pommerman_neural_net import PommermanNNet
+from pommerman import constants
 
 
 def run_simple_vs_ucb():
@@ -125,9 +130,35 @@ def run_ucb_rnd_vs_mcts():
 
     run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, False)
 
+def run_and_render_match():
+    nn_args = {
+        'input_channels': 8,
+        'board_x': constants.BOARD_SIZE_ONE_VS_ONE,
+        'board_y': constants.BOARD_SIZE_ONE_VS_ONE,
+
+        'lr': 0.001,
+        'dropout': 0.3,
+        'epochs': 10,  # 10,
+        'batch_size': 64,
+        'cuda': False,
+        'num_channels': 512
+    }
+    agent_args = {
+        'expandTreeRollout': False,
+        'maxIterations': 100,
+        'maxTime': 0.1,
+        'discountFactor': 0.9999,
+        'depthLimit': 26,
+        'C': 1.0,
+        'tempThreshold': 5
+    }
+    agent1 = NN_Agent(PommermanNNet(**nn_args), **agent_args)
+    agent2 = NN_Agent(PommermanNNet(**nn_args), **agent_args)
+    run_single_match(agent1, agent2, True)
+
 
 def main():
-    run_ucb_rnd_vs_mcts()
+    run_and_render_match()
 
 
 if __name__ == "__main__":

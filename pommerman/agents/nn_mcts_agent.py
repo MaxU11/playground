@@ -11,6 +11,8 @@ from .. import constants
 from .env_simulator import EnvSimulator
 import numpy as np
 
+import time
+
 
 EPS = 1e-8
 
@@ -29,7 +31,7 @@ class NN_Agent(AbstractMCTSAgent):
         self.discountFactor = kwargs.get('discountFactor', 0.9999)
         self.depthLimit = kwargs.get('depthLimit', 26)
         self.C = kwargs.get('C', 0.5) # exploration weight
-        self.temp = kwargs.get('temp', 1)
+        self.tempThreshold = kwargs.get('tempThreshold', 0)
 
         self.stopSelection = False
         self.Qsa = {}  # stores Q values for s,a
@@ -43,22 +45,20 @@ class NN_Agent(AbstractMCTSAgent):
 
         self.c_board = {}
         self.trainExamples = []
-        self.last_reward = 0
+        self.tempCount = self.tempThreshold
 
     def agent_reset(self):
         self.Qsa = {}  # stores Q values for s,a (as defined in the paper)
         self.Nsa = {}  # stores #times edge s,a was visited
         self.Ns = {}  # stores #times board s was visited
         self.Ps = {}  # stores initial policy (returned by neural net)
+        self.tempCount = self.tempThreshold
 
         #self.Es = {}  # stores game.getGameEnded ended for board s
         self.Vs = {}  # stores game.getValidMoves for board s
 
         self.c_board = {}
         self.trainExamples = []
-        self.last_reward = 0
-
-        self.start_t = None
         AbstractMCTSAgent.agent_reset(self)
 
 
@@ -78,12 +78,13 @@ class NN_Agent(AbstractMCTSAgent):
         r = self.get_reward(self.root, data)
 
         if not self.root.done:
-            a_probs = self.getActionProb(s)
+            a_probs = self.getActionProb(s, int(self.tempCount > 0))
             self.add_train_example(c_board, a_probs, r)
             action = np.random.choice(len(a_probs), p=a_probs)
         else:
             action = 0
 
+        self.tempCount -= 1
         return action
 
     def get_sym_boards(self, s, a_probs):
@@ -255,13 +256,19 @@ class NN_Agent(AbstractMCTSAgent):
     def best_child(self, node):
         return 0
 
-    def getActionProb(self, s_board):
+    def getActionProb(self, s_board, temp):
         counts = [self.Nsa[(s_board, a)] if (s_board, a) in self.Nsa else 0 for a in range(self.action_space)]
-        counts = [x ** (1. / self.temp) for x in counts]
-        counts_sum = float(sum(counts))
-        probs = [x / counts_sum for x in counts]
-
-        return probs
+        if temp == 0:
+            bestAs = np.array(np.argwhere(counts == np.max(counts))).flatten()
+            bestA = np.random.choice(bestAs)
+            probs = [0] * len(counts)
+            probs[bestA] = 1
+            return probs
+        else:
+            counts = [x ** (1. / temp) for x in counts]
+            counts_sum = float(sum(counts))
+            probs = [x / counts_sum for x in counts]
+            return probs
 
     def get_canonical_board_str(self, node, agent_id):
         if node in self.c_board:

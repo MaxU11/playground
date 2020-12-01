@@ -86,6 +86,9 @@ class Viewer(object):
         path = os.path.join(path, filename)
         pyglet.image.get_buffer_manager().get_color_buffer().save(path)
 
+    def get_image(self):
+        return pyglet.image.get_buffer_manager().get_color_buffer()
+
 
 class PixelViewer(Viewer):
     '''Renders the game as a set of square pixels'''

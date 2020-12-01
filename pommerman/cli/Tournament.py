@@ -77,7 +77,7 @@ def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, AllVs
     if get_observations:
         match_observations = []
 
-    if not os.path.isdir(csv_dir):
+    if create_csv and not os.path.isdir(csv_dir):
         os.makedirs(csv_dir)
     game_details = [['p1','p2','result','winner','time','steps', 'add_info_p1', 'add_info_p2']]
     write_csv_pos = 0
@@ -183,7 +183,8 @@ def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, AllVs
     else:
         return tot_wins, tot_tie, tot_loss
 
-def run_single_match(agent1, agent2, seed=None):
+
+def run_single_match(agent1, agent2, render=False, seed=None):
     '''Wrapper to help start the game'''
     config = 'OneVsOne-v0'
     record_pngs_dir = None #f'C:/tmp/Results/PNGS'
@@ -191,7 +192,6 @@ def run_single_match(agent1, agent2, seed=None):
     game_state_file = None
     render_mode = 'human'
     do_sleep = False
-    render = False
 
     agents = [agent1, agent2]
 

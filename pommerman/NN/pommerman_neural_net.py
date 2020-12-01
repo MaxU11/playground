@@ -87,12 +87,9 @@ class PommermanNNet(nn.Module):
         pi = self.fc3(s)  # batch_size x action_size
         v = self.fc4(s)  # batch_size x 1
 
-        return F.log_softmax(pi, dim=1), torch.tanh(v)
+        return F.softmax(pi, dim=1), torch.tanh(v)
 
     def predict(self, board):
-        """
-        board: np array with board
-        """
 
         #return np.random.uniform(0, 1, size=self.action_size), np.random.uniform(0, 1, size=1)
 
@@ -105,16 +102,13 @@ class PommermanNNet(nn.Module):
         with torch.no_grad():
             pi, v = self(board)
 
-        return torch.exp(pi).data.cpu().numpy()[0], v.data.cpu().numpy()[0]
+        return pi.data.cpu().numpy()[0], v.data.cpu().numpy()[0]
 
     def make_train(self, examples, folder='checkpoint', filename='loss.csv'):
-        """
-        examples: list of examples, each example is of form (board, pi, v)
-        """
         if not os.path.isdir(folder):
             os.makedirs(folder)
 
-        optimizer = optim.Adam(self.parameters())
+        optimizer = optim.Adam(self.parameters(), lr=self.lr)
 
         pi_losses_arr = []
         v_losses_arr = []
@@ -165,9 +159,8 @@ class PommermanNNet(nn.Module):
                 writer.writerow([self.id, pi_losses_arr[l], v_losses_arr[l]])
             writer.writerow(['END'])
 
-
     def loss_pi(self, targets, outputs):
-        return -torch.sum(targets * outputs) / targets.size()[0]
+        return -torch.sum(targets * torch.log(outputs + 1e-8)) / targets.size()[0]
 
     def loss_v(self, targets, outputs):
         return torch.sum((targets - outputs.view(-1)) ** 2) / targets.size()[0]
@@ -207,7 +200,7 @@ class PommermanNNet(nn.Module):
     def load_checkpoint(self, folder='checkpoint', filename='checkpoint.pth.tar'):
         filepath = os.path.join(folder, filename)
         if not os.path.exists(filepath):
-            raise ("No model in path {}".format(filepath))
+            raise ValueError("No model in path {}".format(filepath))
         map_location = None if self.use_cuda else 'cpu'
         checkpoint = torch.load(filepath, map_location=map_location)
         self.load_state_dict(checkpoint['state_dict'])
