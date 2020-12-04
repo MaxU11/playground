@@ -130,6 +130,39 @@ def run_ucb_rnd_vs_mcts():
 
     run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, False)
 
+def compare_nnet_agents():
+    nn_args = {
+        'input_channels': 8,
+        'board_x': constants.BOARD_SIZE_ONE_VS_ONE,
+        'board_y': constants.BOARD_SIZE_ONE_VS_ONE,
+
+        'lr': 0.001,
+        'dropout': 0.3,
+        'epochs': 10,  # 10,
+        'batch_size': 64,
+        'cuda': False,
+        'num_channels': 512
+    }
+    agent_args = {
+        'expandTreeRollout': False,
+        'maxIterations': 25,
+        'maxTime': 0.0,
+        'discountFactor': 0.9999,
+        'depthLimit': 26,
+        'C': 1.0,
+        'tempThreshold': 0
+    }
+    nnet1 = PommermanNNet(**nn_args)
+    nnet1.load_checkpoint('C:/tmp/Model/analyse_1', 'nnet_6.pth.tar')
+
+    nnet2 = PommermanNNet(**nn_args)
+
+    agent_pool1 = [(f'Trained_NN_Agent', NN_Agent, {'nnet': nnet1, **agent_args})]
+    agent_pool2 = [(f'Rnd_NN_Agent', NN_Agent, {'nnet': nnet2, **agent_args})]
+    match_count = 40
+    wins, ties, loss = run_tournament('tournament_name', agent_pool1, agent_pool2, int(match_count / 2), False, False, False)
+    print('Ended: ', wins, ties, loss)
+
 def run_and_render_match():
     nn_args = {
         'input_channels': 8,
@@ -145,41 +178,23 @@ def run_and_render_match():
     }
     agent_args = {
         'expandTreeRollout': False,
-        'maxIterations': 100,
-        'maxTime': 0.1,
+        'maxIterations': 25,
+        'maxTime': 0.0,
         'discountFactor': 0.9999,
         'depthLimit': 26,
         'C': 1.0,
-        'tempThreshold': 5
+        'tempThreshold': 0
     }
-    agent1 = NN_Agent(PommermanNNet(**nn_args), **agent_args)
-    agent2 = NN_Agent(PommermanNNet(**nn_args), **agent_args)
+    nnet1 = PommermanNNet(**nn_args)
+    #nnet1.load_checkpoint('C:/tmp/Model/analyse_1', 'nnet_6.pth.tar')
+
+    nnet2 = PommermanNNet(**nn_args)
+    nnet2.load_checkpoint('C:/tmp/Model/analyse_1', 'nnet_6.pth.tar')
+
+    agent1 = NN_Agent(nnet1, **agent_args)
+    agent2 = NN_Agent(nnet2, **agent_args)
     run_single_match(agent1, agent2, True)
-
-import matplotlib.image as mpimg
-from io import BytesIO
-from io import StringIO
-from pommerman import my_utility
-def main():
-    # Passage = 0, Rigid = 1, Wood = 2, Bomb = 3, Flames = 4
-    # ExtraBomb = 6, IncrRange = 7, Kick = 8, Agent0 = 10, Agent1 = 11
-    game_type = constants.GameType(4)
-
-    board = [[0, 0, 2, 1, 1, 1],
-             [0, 0, 10, 0, 0, 0],
-             [2, 0, 0, 1, 3, 1],
-             [1, 0, 1, 0, 0, 1],
-             [1, 0, 0, 3, 0, 1],
-             [1, 11, 1, 1, 1, 0]]
-    bomb_info = [(0, 5, 2, None), (1, 3, 2, None)]
-
-    game_state = my_utility.get_gamestate(board, bomb_info)
-    game_data = my_utility.get_gamedata(game_state, game_type)
-
-    data = BytesIO()
-    my_utility.get_texture(data, game_data, None)
-
 
 
 if __name__ == "__main__":
-    main()
+    compare_nnet_agents()
