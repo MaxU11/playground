@@ -273,17 +273,25 @@ class NN_Agent(AbstractMCTSAgent):
     def get_canonical_board_str(self, node, agent_id):
         if node in self.c_board:
             return self.c_board[node]
-        c_board = self.get_canonical_board(node, agent_id)
+        str_rep, c_board = NN_Agent.get_canonical_board_str_from_data(self.get_data(node), agent_id)
+        self.c_board[node] = (str_rep, c_board)
+        return str_rep, c_board
+
+    @staticmethod
+    def get_canonical_board_str_from_data(data, agent_id):
+        c_board = NN_Agent.get_canonical_board_from_data(data, agent_id)
         str_rep = ""
         for row in range(c_board.shape[0]):
             for col in range(c_board.shape[1]):
                 str_rep += str(c_board[row, col]) + ','
             str_rep += '\n'
-        self.c_board[node] = (str_rep, c_board)
         return str_rep, c_board
 
     def get_canonical_board(self, node, agent_id):
-        data = self.get_data(node)
+        return NN_Agent.get_canonical_board_from_data(self.get_data(node), agent_id)
+
+    @staticmethod
+    def get_canonical_board_from_data(data, agent_id):
         c_board = np.zeros(data.board.shape, dtype=np.int32)
         for row in range(data.board.shape[0]):
             for col in range(data.board.shape[1]):

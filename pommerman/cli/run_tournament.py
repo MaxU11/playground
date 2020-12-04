@@ -156,9 +156,29 @@ def run_and_render_match():
     agent2 = NN_Agent(PommermanNNet(**nn_args), **agent_args)
     run_single_match(agent1, agent2, True)
 
-
+import matplotlib.image as mpimg
+from io import BytesIO
+from io import StringIO
+from pommerman import my_utility
 def main():
-    run_and_render_match()
+    # Passage = 0, Rigid = 1, Wood = 2, Bomb = 3, Flames = 4
+    # ExtraBomb = 6, IncrRange = 7, Kick = 8, Agent0 = 10, Agent1 = 11
+    game_type = constants.GameType(4)
+
+    board = [[0, 0, 2, 1, 1, 1],
+             [0, 0, 10, 0, 0, 0],
+             [2, 0, 0, 1, 3, 1],
+             [1, 0, 1, 0, 0, 1],
+             [1, 0, 0, 3, 0, 1],
+             [1, 11, 1, 1, 1, 0]]
+    bomb_info = [(0, 5, 2, None), (1, 3, 2, None)]
+
+    game_state = my_utility.get_gamestate(board, bomb_info)
+    game_data = my_utility.get_gamedata(game_state, game_type)
+
+    data = BytesIO()
+    my_utility.get_texture(data, game_data, None)
+
 
 
 if __name__ == "__main__":

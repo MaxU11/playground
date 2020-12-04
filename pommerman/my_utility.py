@@ -3,6 +3,11 @@ from pommerman import forward_model
 from pommerman import constants
 from pommerman import characters
 from pommerman import graphics
+from pommerman.agents import env_simulator
+
+from pyglet.image.codecs.png import PNGImageEncoder
+import pyglet
+import matplotlib.pyplot as plt
 
 def get_gamestate(board, bomb_info):
     board = np.array(board)
@@ -15,13 +20,13 @@ def get_gamestate(board, bomb_info):
         ValueError('Invalid bomb_info length!')
 
     bombs = []
-    for b in range(list(bomb_info)):
+    for b in range(len(bomb_info)):
         inf = {
             "position": b_pos[b],
-            "bomber_id": bomb_info[0],
-            "life": bomb_info[1],
-            "blast_strength": bomb_info[2],
-            "moving_direction": bomb_info[3]
+            "bomber": bomb_info[b][0],
+            "life": bomb_info[b][1],
+            "blast_strength": bomb_info[b][2],
+            "moving_direction": bomb_info[b][3]
         }
         bombs.append(inf)
 
@@ -49,12 +54,12 @@ def get_gamestate(board, bomb_info):
         "flames": [],
         "intended_actions": [0, 0],
         "items": [],
-        "step_count": "1"
+        "step_count": 1
     }
     return gamestate
 
 def get_gamedata(gamestate, game_type):
-    game_data = object
+    game_data = env_simulator.GameData()
     game_data.board_size = gamestate['board_size']
     game_data.step_count = gamestate['step_count'] - 1
     game_data.max_steps = 800
@@ -79,11 +84,13 @@ def get_gamedata(gamestate, game_type):
     game_data.bombs = []
     for b in gamestate['bombs']:
         bomb = characters.Bomb(**b)
+        game_data.bombs.append(bomb)
 
     # flames
     game_data.flames = []
     for f in gamestate['flames']:
         flame = characters.Flame(**f)
+        game_data.flames.append(flame)
 
     # done
     game_data.done = forward_model.ForwardModel.get_done(game_data.agents, game_data.step_count,
@@ -111,41 +118,48 @@ def get_position(board, item, is_single_pos):
     else:
         return pos
 
-def render_image(self, game_data, mode=None):
-    mode = mode or self._mode or 'human'
+def get_texture(file, game_data, size):
+    rm = graphics.ResourceManager(game_data.game_type)
+    h = game_data.board.shape[0]
+    w = game_data.board.shape[1]
 
-    if mode == 'rgb_array':
-        rgb_array = graphics.PixelViewer.rgb_array(
-            game_data.board, game_data.board_size, game_data.agents,
-            False, game_data.board_size)
-        return rgb_array[0]
-
-    if mode == 'rgb_pixel':
-        _viewer = graphics.PixelViewer(
-            board_size=game_data.board_size,
-            agents=game_data.agents,
-            agent_view_size=game_data.board_size,
-            partially_observable=False)
+    if size:
+        tile_width = int(size[0] / w)
+        tile_height = int(size[1] / h)
     else:
-        _viewer = graphics.PommeViewer(
-            board_size=game_data._oard_size,
-            agents=game_data.agents,
-            partially_observable=False,
-            agent_view_size=game_data.board_size,
-            game_type=game_data.game_type)
+        ex = rm.tile_from_state_value(0)
+        tile_width = ex.width
+        tile_height = ex.height
 
-        self._viewer.set_board(game_data.board)
-        self._viewer.set_agents(game_data.agents)
-        self._viewer.set_step(game_data.step_count)
-        self._viewer.set_bombs(game_data.bombs)
-        self._viewer.render()
+    texture = pyglet.image.Texture.create(width=tile_width * w, height=tile_height * h)
 
-        # Register all agents which need human input with Pyglet.
-        # This needs to be done here as the first `imshow` creates the
-        # window. Using `push_handlers` allows for easily creating agents
-        # that use other Pyglet inputs such as joystick, for example.
-        for agent in self._agents:
-            if agent.has_user_input():
-                self._viewer.window.push_handlers(agent)
+    board = game_data.board
+    for row in range(h):
+        for col in range(w):
+            x = col * tile_width
+            y = ((h-1) * tile_height) - row * tile_height
+            tile_state = board[row][col]
+            if tile_state == constants.Item.Bomb.value:
+                bomb_life = get_bomb_life(game_data, row, col)
+                tile = rm.get_bomb_tile(bomb_life)
+            else:
+                tile = rm.tile_from_state_value(tile_state)
+            img = scale_img(tile, tile_width, tile_height)
 
-    return _viewer.get_image()
+            texture.blit_into(img.get_image_data(), x=x, y=y, z=0)
+
+    texture.save(file=file, encoder=PNGImageEncoder()) # filename='C:\\tmp\\tmp.png')
+    file.seek(0)
+
+
+def get_bomb_life(game_data, row, col):
+    for bomb in game_data.bombs:
+        x, y = bomb.position
+        if x == row and y == col:
+            return bomb.life
+
+def scale_img(image, width, height):
+    #sprite = pyglet.sprite.Sprite(image)
+    #sprite.update(scale=10)
+    #image = sprite.image
+    return image
