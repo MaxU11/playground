@@ -51,14 +51,14 @@ $ conda env update -f env.yml --prune
 ## A Simple Example
 
 The [simple_ffa_run.py](../examples/simple_ffa_run.py) runs a sample Free-For-All game with two
-[SimpleAgent](../pommerman/agents/simple_agent.py)s and two [RandomAgent](../pommerman/agents/random_agent.py)s
+[SimpleAgent](../pommerman/agents/simple_careful_agent.py)s and two [RandomAgent](../pommerman/agents/random_agent.py)s
 on the board.
 
 ## Using A Docker Agent
 
 The above example can be extended to use [DockerAgent](../pommerman/agents/docker_agent.py) instead of a
 [RandomAgent](../pommerman/agents/random_agent.py). [examples/docker-agent](../examples/docker-agent) contains
-the code to wrap a [SimpleAgent](../pommerman/agents/simple_agent.py) inside Docker.
+the code to wrap a [SimpleAgent](../pommerman/agents/simple_careful_agent.py) inside Docker.
 
 
 * We will build a docker image with the name "pommerman/simple-agent" using the `Dockerfile` provided.

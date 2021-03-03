@@ -16,11 +16,12 @@ class UcbMCTSAgent(AbstractMCTSAgent):
         # parent hyperparameter
         self.expandTreeRollout = kwargs.get('expandTreeRollout', False)
         self.maxIterations = kwargs.get('maxIterations', 1000)
-        self.maxTime = kwargs.get('maxTime', 0.1)
+        self.maxTime = kwargs.get('maxTime', 0.0)
         # hyperparameter
         self.discountFactor = kwargs.get('discountFactor', 0.9999)
         self.depthLimit = kwargs.get('depthLimit', 26)
-        self.C = kwargs.get('C', 0.5) # exploration weight
+        self.C = kwargs.get('C', 1.414214) # exploration weight
+        self.rew = kwargs.get('rew', 0)
 
         self.Q = defaultdict(int)  # total reward of each node
         self.N = defaultdict(int)  # total visit count for each node
@@ -73,21 +74,30 @@ class UcbMCTSAgent(AbstractMCTSAgent):
         return random.choice(node.unseen_actions)
 
     def result(self, node, data):
+        if node.agent_id != self.agent_id:
+            raise ValueError('why reward from enemy?')
+
         # get reward from terminal node
         reward = 0.0
         alive = EnvSimulator.get_alive(data)
+        me_alive = False
+        enemy_alive = False
         for a in alive:
             if a == self.agent_id:
-                if alive[a]:
-                    reward += 1.0
-                else:
-                    reward += -1.0
+                me_alive = alive[a]
             else:
-                if alive[a]:
-                    reward += -0.5
-                else:
-                    reward += 0.5
-        return reward
+                enemy_alive = alive[a]
+
+        if me_alive and enemy_alive:
+            reward = [0, 0]
+        elif me_alive and not enemy_alive:
+            reward = [1, -1]
+        elif not me_alive and enemy_alive:
+            reward = [-1, 1]
+        elif not me_alive and not enemy_alive:
+            reward = [-1, -1]
+
+        return reward[0]
 
     def update_stats(self, node, action, result):
         # get updated node stats

@@ -103,12 +103,20 @@ class Coach:
         reward = run_single_match(agent1, agent2)
 
         trainExamples_p1 = agent1.trainExamples
-        trainExamples_p2 = agent1.trainExamples
+        trainExamples_p2 = agent2.trainExamples
 
         if (len(trainExamples_p1) != len(trainExamples_p2)):
-            raise ValueError('obs should have same amount.')
+            raise ValueError(f'obs should have same amount. {len(trainExamples_p1)}!={len(trainExamples_p2)} (a1{agent1.actCount} a2{agent2.actCount})')
         if (len(trainExamples_p1) % 8) != 0:
             raise ValueError('invalid obs length')
+
+        del agent1
+        del agent2
+
+        def getReward(result, reward):
+            r = min(result+reward, 1)
+            r = max(r, -1)
+            return r
 
         j=0
         r1 = reward[0]
@@ -118,8 +126,8 @@ class Coach:
                 r1 *= df
                 r2 *= df
             j += 1
-            trainExamples_p1[i] = (trainExamples_p1[i][0], trainExamples_p1[i][1], r1)
-            trainExamples_p2[i] = (trainExamples_p2[i][0], trainExamples_p2[i][1], r2)
+            trainExamples_p1[i] = (trainExamples_p1[i][0], trainExamples_p1[i][1], getReward(r1, trainExamples_p1[i][2]))
+            trainExamples_p2[i] = (trainExamples_p2[i][0], trainExamples_p2[i][1], getReward(r2, trainExamples_p2[i][2]))
 
         return trainExamples_p1 + trainExamples_p2
 

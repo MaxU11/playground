@@ -69,6 +69,9 @@ class EnvSimulator:
 
         new_board = EnvSimulator.get_board(game_data.board_size, obs['board'])
         new_bomb_life = EnvSimulator.get_board(game_data.board_size, obs['bomb_life'], 0)
+        new_bomb_strength = EnvSimulator.get_board(game_data.board_size, obs['bomb_blast_strength'], 0)
+
+        reset = False
 
         # get actions
         actions = {}
@@ -76,34 +79,71 @@ class EnvSimulator:
             old_pos = EnvSimulator.get_position(game_data.board, a.agent_id + 10, True)
             new_pos = EnvSimulator.get_position(new_board, a.agent_id + 10, True)
 
+            if not a.is_alive:
+                raise ValueError('update error: agent life!')
+
+            for b in game_data.bombs:
+                if b.moving_direction != None:
+                    pass
+
             if (old_pos != new_pos):
                 actions[a.agent_id] = utility.get_direction(old_pos, new_pos).value
+                if not a.can_kick and game_data.board[new_pos] == constants.Item.Bomb.value:
+                    for b in game_data.bombs:
+                        if b.position == new_pos and b.moving_direction != None:
+                            a.can_kick = True
+                            reset = True
             elif new_bomb_life[new_pos] == constants.DEFAULT_BOMB_LIFE:
                 actions[a.agent_id] = constants.Action.Bomb.value
+                if a.ammo == 0:
+                    a.ammo += 1
+                    reset = True
+                if a.blast_strength != new_bomb_strength[new_pos]:
+                    a.blast_strength = new_bomb_strength[new_pos]
+                    reset = True
             else:
                 actions[a.agent_id] = constants.Action.Stop.value
 
+        save_game_data = copy.deepcopy(game_data)
         EnvSimulator.act(game_data, actions)
+
+        if game_data.agents[0].is_alive != (10 in obs['alive']):
+            raise ValueError(f'update error: agent life!\n\n{game_data.board}\n\n{new_board}')
+        if game_data.agents[1].is_alive != (11 in obs['alive']):
+            raise ValueError(f'update error: agent life!\n\n{game_data.board}\n\n{new_board}')
+        if (len(game_data.bombs) != len(new_bomb_life[new_bomb_life > 0])):
+            raise ValueError(f'update error: bomb count!\n\n{game_data.board}\n\n{new_board}')
 
         # print("board: \n", game_data.board)
         # print("agent1: ", game_data.agents[0].ammo, game_data.agents[0].blast_strength, game_data.agents[0].can_kick)
         # print("agent2: ", game_data.agents[1].ammo, game_data.agents[1].blast_strength, game_data.agents[1].can_kick)
 
-        reset = False
-
         # compare boards
-        if not EnvSimulator.boards_equal(game_data.board, new_board, True):
-            a1bomb, a2bomb, kick, flame = EnvSimulator.get_boards_differences(game_data.board, new_board)
-            # print(a1bomb, a2bomb, kick, flame)
-            if a1bomb and my_id is not 0:
-                game_data.agents[0].ammo += 1
-            elif a2bomb and my_id is not 1:
-                game_data.agents[1].ammo += 1
-            elif kick and game_data.agents[my_id].can_kick is bool(obs['can_kick']):
-                game_data.agents[enemy_id].can_kick = True
-            elif flame and game_data.agents[my_id].blast_strength is int(obs['blast_strength']):
-                game_data.agents[enemy_id].blast_strength += 1
-            reset = True
+        equal, equal_noitems = EnvSimulator.boards_equal(game_data.board, new_board, True)
+        if not equal:
+            if equal_noitems:
+                reset = True  # EQUAL WITHOUT ITEMS => SOMEWHERE NEW ITEMS AVAILABLE -> RESET
+            else:
+                print('board unequal: {game_data.board}\n\n{new_board}\n\n{actions}')
+                def find_actions(save_game_data, actions):
+                    actions_1 = [actions[0]] if actions[0] != 0 else range(1, 6)
+                    actions_2 = [actions[1]] if actions[1] != 0 else range(1, 6)
+                    for a1 in actions_1:
+                        for a2 in actions_2:
+                            game_data = copy.deepcopy(save_game_data)
+                            acts = {0: a1, 1: a2}
+                            EnvSimulator.act(game_data, acts)
+                            eq, eq_noitems = EnvSimulator.boards_equal(game_data.board, new_board, True)
+                            if eq_noitems:
+                                return game_data, acts, eq
+                    return None, None, False
+
+                game_data, actions, eq = find_actions(save_game_data, actions)
+                print(f'found game_data: {game_data}\n\n{actions}')
+                if not game_data:
+                    raise ValueError(f'should not happen anymore')
+                if not eq:
+                    reset = True # EQUAL WITHOUT ITEMS => SOMEWHERE NEW ITEMS AVAILABLE -> RESET
 
         game_data.agents[my_id].ammo = int(obs['ammo'])
         game_data.agents[my_id].blast_strength = int(obs['blast_strength'])
@@ -166,7 +206,7 @@ class EnvSimulator:
         pos = list(zip(pos[0], pos[1]))
         if is_single_pos:
             if len(pos) != 1:
-                raise ValueError("Invalid pos count!")
+                raise ValueError("Invalid pos count!", board, item)
             return pos[0]
         else:
             return pos
@@ -193,6 +233,8 @@ class EnvSimulator:
 
     @staticmethod
     def boards_equal(board1, board2, ignore_items):
+        comparison = (board1 == board2).all()
+
         if ignore_items:
             board1 = copy.deepcopy(board1)
             board2 = copy.deepcopy(board2)
@@ -202,9 +244,33 @@ class EnvSimulator:
             board2[board2 == constants.Item.ExtraBomb.value] = constants.Item.Passage.value
             board2[board2 == constants.Item.IncrRange.value] = constants.Item.Passage.value
             board2[board2 == constants.Item.Kick.value] = constants.Item.Passage.value
+            comparison_ignore = (board1 == board2).all()
+            return comparison, comparison_ignore
 
-        comparison = (board1 == board2)
         return comparison.all()
+
+    @staticmethod
+    def boards_equal_speed(board1, board2, ignore_items):
+        comparison = (board1 != board2)
+
+        if ignore_items:
+            diff_items = False
+            b1_diff = board1[comparison]
+            b2_diff = board2[comparison]
+            b1_no_items = (b1_diff != constants.Item.ExtraBomb.value) & \
+                          (b1_diff != constants.Item.IncrRange.value) & \
+                          (b1_diff != constants.Item.Kick.value) & \
+                          (b1_diff != constants.Item.Passage.value)
+            diff_items = b1_no_items.any()
+            if not diff_items:
+                b2_no_items = (b2_diff != constants.Item.ExtraBomb.value) & \
+                              (b2_diff != constants.Item.IncrRange.value) & \
+                              (b2_diff != constants.Item.Kick.value) &\
+                              (b2_diff != constants.Item.Passage.value)
+                diff_items = b2_no_items.any()
+            return diff_items
+
+        return not comparison.any()
 
     @staticmethod
     def get_boards_differences(board1, board2):
@@ -225,13 +291,13 @@ class EnvSimulator:
             for diff in diffs:
                 prev_item = board1[diff]
                 new_item = board2[diff]
-                if prev_item is constants.Item.Agent1 and new_item is constants.Item.Bomb:
+                if prev_item == constants.Item.Agent1.value and new_item == constants.Item.Bomb.value:
                     a1bomb = True
-                elif prev_item is constants.Item.Agent2 and new_item is constants.Item.Bomb:
+                elif prev_item == constants.Item.Agent2.value and new_item == constants.Item.Bomb.value:
                     a2bomb = True
-                elif prev_item is constants.Item.Passage and new_item is constants.Item.Bomb:
+                elif prev_item == constants.Item.Passage.value and new_item == constants.Item.Bomb.value:
                     kick = True
-                elif new_item is constants.Item.Flames:
+                elif new_item == constants.Item.Flames.value:
                     flame = True
                 else:
                     raise ValueError('Invalid difference between maps.')
@@ -306,6 +372,38 @@ class EnvSimulator:
 
         fire_pos.append((next_x, next_y))
         EnvSimulator._get_fire_positions_in_direction(board, next_x, next_y, strength - 1, x_dir, y_dir, fire_pos)
+
+    @staticmethod
+    def get_bomb_items(board, bomb_pos, bomb_strength):
+        items = []
+        EnvSimulator._get_items_in_direction(board, bomb_pos, bomb_strength - 1, 0, 1, items)
+        EnvSimulator._get_items_in_direction(board, bomb_pos, bomb_strength - 1, 0, -1, items)
+        EnvSimulator._get_items_in_direction(board, bomb_pos, bomb_strength - 1, -1, 0, items)
+        EnvSimulator._get_items_in_direction(board, bomb_pos, bomb_strength - 1, 1, 0, items)
+        return items
+
+    @staticmethod
+    def _get_items_in_direction(board, pos, strength, x_dir, y_dir, items):
+        if strength <= 0 or not utility.position_on_board(board, pos):
+            return
+        x, y = pos
+        next_x = x + x_dir
+        next_y = y + y_dir
+        if not utility.position_on_board(board, (next_x, next_y)):
+            return
+        item = board[(next_x, next_y)]
+        try:
+            if type(item) == tuple:
+                print(item)
+            if not item in items:
+                items.append(item)
+        except:
+            if type(item) == tuple:
+                print(item)
+            print(item, items)
+        if utility.position_in_items(board, (next_x, next_y), [constants.Item.Rigid, constants.Item.Wood]):
+            return
+        EnvSimulator._get_fire_positions_in_direction(board, next_x, next_y, strength - 1, x_dir, y_dir, items)
 
     @staticmethod
     def get_game_state(game_data):

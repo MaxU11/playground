@@ -46,6 +46,7 @@ class NN_Agent(AbstractMCTSAgent):
         self.c_board = {}
         self.trainExamples = []
         self.tempCount = self.tempThreshold
+        self.actCount = 0
 
     def agent_reset(self):
         self.Qsa = {}  # stores Q values for s,a (as defined in the paper)
@@ -60,6 +61,7 @@ class NN_Agent(AbstractMCTSAgent):
         self.c_board = {}
         self.trainExamples = []
         AbstractMCTSAgent.agent_reset(self)
+        self.actCount = 0
 
 
     def root_changed(self, root):
@@ -79,13 +81,45 @@ class NN_Agent(AbstractMCTSAgent):
 
         if not self.root.done:
             a_probs = self.getActionProb(s, int(self.tempCount > 0))
-            self.add_train_example(c_board, a_probs, r)
+            self.add_train_example(c_board, a_probs, 0)
             action = np.random.choice(len(a_probs), p=a_probs)
         else:
+            raise ValueError('root done!')
             action = 0
 
         self.tempCount -= 1
+        self.actCount += 1
         return action
+
+    def evaluate_action(self, actions, old_board, new_board):
+        reward = 0
+        my_id = self.agent_id
+        op_id = abs(self.agent_id-1)
+        my_pos_1 = EnvSimulator.get_position(old_board, my_id+10, True)
+        op_pos_1 = EnvSimulator.get_position(old_board, op_id+10, True)
+        my_pos_2 = EnvSimulator.get_position(new_board, my_id+10, True)
+        op_pos_2 = EnvSimulator.get_position(new_board, op_id+10, True)
+
+        dist_1 = abs(my_pos_1[0] - op_pos_1[0]) + abs(my_pos_1[1] - op_pos_1[1])
+        dist_2 = abs(my_pos_2[0] - op_pos_2[0]) + abs(my_pos_2[1] - op_pos_2[1])
+
+        if actions[my_id] == 5:
+            items = EnvSimulator.get_bomb_items(new_board, my_pos_2, self.blast_strength)
+            if op_id+10 in items:
+                reward += 0.3
+            if constants.Item.Wood.value in items:
+                reward += 0.15
+        else:
+            if (my_pos_1 != my_pos_2):
+                if dist_2 < dist_1:
+                    reward += 0.15
+                elif dist_2 > dist_1:
+                    reward -= 0.15
+                if old_board[my_pos_2] == constants.Item.Kick.value or old_board[my_pos_2] == constants.Item.IncrRange.value or old_board[my_pos_2] == constants.Item.ExtraBomb.value:
+                    reward += 0.3
+
+        for i in range(8):
+            self.trainExamples[-1-i] = (self.trainExamples[-1-i][0], self.trainExamples[-1-i][1], reward)
 
     def get_sym_boards(self, s, a_probs):
         sym = []

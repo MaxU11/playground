@@ -99,6 +99,9 @@ class AbstractMCTSSkeleton(ABC, BaseAgent):
     def get_agent_info(self, info):
         info['avgTime'] = self._avgTime
         info['avgRolloutDepth'] = self._avgRolloutDepth
+        info['ammo'] = self.ammo
+        info['can_kick'] = self.can_kick
+        info['blast_strength'] = self.blast_strength
 
     def non_terminal_traverse(self, node):
         return self.non_terminal(node)

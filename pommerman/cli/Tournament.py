@@ -37,6 +37,7 @@ def run(env, agent_names, config, render, do_sleep, record_pngs_dir=None, record
         actions = env.act(obs)
         steps += 1
         obs, reward, done, info = env.step(actions)
+
         if max(reward) > 0 and done is False:
             raise ValueError('Why?????????????????????')
         observations.append(obs)
@@ -46,7 +47,10 @@ def run(env, agent_names, config, render, do_sleep, record_pngs_dir=None, record
             record_pngs_dir=record_pngs_dir,
             record_json_dir=record_json_dir,
             do_sleep=do_sleep)
+        print(f'game end: reward={reward}')
         if do_sleep:
+            time.sleep(5)
+        else:
             time.sleep(5)
         env.render(close=True)
 
@@ -62,7 +66,7 @@ def run(env, agent_names, config, render, do_sleep, record_pngs_dir=None, record
     return info, steps, observations, reward
 
 
-def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, AllVsAll=True, create_csv=True, get_observations=False, seed=None):
+def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, AllVsAll=True, create_csv=True, get_observations=False, only_one_side=False, last_num=0, seed=None):
     '''Wrapper to help start the game'''
     config = 'OneVsOne-v0'
     record_pngs_dir = None #f'C:/tmp/Results/PNGS'
@@ -88,7 +92,10 @@ def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, AllVs
     else:
         total_duels = len(agent_pool1)
     game_num = 0
-    total_games = total_duels * match_count * 2
+    if only_one_side:
+        total_games = total_duels * match_count
+    else:
+        total_games = total_duels * match_count * 2
     tot_wins = tot_tie = tot_loss = 0
     p1_num = 0
     for p1_a in agent_pool1:
@@ -102,7 +109,10 @@ def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, AllVs
             print(f'Duel {duel_num}/{total_duels}: {p1_a[0]} vs {p2_a[0]}')
 
             wins = ties = loss = 0
-            for d in range(2):
+            side = 2
+            if only_one_side:
+                side = 1
+            for d in range(side):
                 if d == 0:
                     agents = [p1_a[1](**p1_a[2]), p2_a[1](**p2_a[2])]
                     agent_names = [p1_a[0], p2_a[0]]
@@ -122,38 +132,39 @@ def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, AllVs
                 for i in range(match_count):
                     game_num += 1
 
-                    record_pngs_dir_ = None
-                    record_json_dir_ = None
-                    if record_pngs_dir:
-                        record_pngs_dir_ = f'{record_pngs_dir}/{tournament_name}/{agent_names[0]}_vs_{agent_names[1]}_{i+1}'
-                    if record_json_dir:
-                        record_json_dir_ = f'{record_json_dir}/{tournament_name}/{agent_names[0]}_vs_{agent_names[1]}_{i+1}'
+                    if game_num > last_num:
+                        record_pngs_dir_ = None
+                        record_json_dir_ = None
+                        if record_pngs_dir:
+                            record_pngs_dir_ = f'{record_pngs_dir}/{tournament_name}/{agent_names[0]}_vs_{agent_names[1]}_{i+1}'
+                        if record_json_dir:
+                            record_json_dir_ = f'{record_json_dir}/{tournament_name}/{agent_names[0]}_vs_{agent_names[1]}_{i+1}'
 
-                    start = time.time()
-                    info, steps, observations, reward = run(env, agent_names, config, render, do_sleep, record_pngs_dir_, record_json_dir_)
+                        start = time.time()
+                        info, steps, observations, reward = run(env, agent_names, config, render, do_sleep, record_pngs_dir_, record_json_dir_)
 
-                    if match_observations:
-                        match_observations.append((observations, reward))
+                        if match_observations:
+                            match_observations.append((observations, reward))
 
-                    total_time = time.time() - start
-                    winner = -1
-                    if info['result'] == constants.Result.Win:
-                        winner = int(info['winners'][0])
-                        if winner == 0: m_wins += 1
-                        else: m_loss += 1
-                    else:
-                        m_ties += 1
+                        total_time = time.time() - start
+                        winner = -1
+                        if info['result'] == constants.Result.Win:
+                            winner = int(info['winners'][0])
+                            if winner == 0: m_wins += 1
+                            else: m_loss += 1
+                        else:
+                            m_ties += 1
 
-                    agent_info_1 = {}
-                    agent_info_2 = {}
-                    if isinstance(agents[0], AbstractMCTSSkeleton):
-                        agents[0].get_agent_info(agent_info_1)
-                    if isinstance(agents[1], AbstractMCTSSkeleton):
-                        agents[1].get_agent_info(agent_info_2)
+                        agent_info_1 = {}
+                        agent_info_2 = {}
+                        if isinstance(agents[0], AbstractMCTSSkeleton):
+                            agents[0].get_agent_info(agent_info_1)
+                        if isinstance(agents[1], AbstractMCTSSkeleton):
+                            agents[1].get_agent_info(agent_info_2)
 
-                    game_details.append([agent_names[0], agent_names[1], info['result'], winner, total_time, steps, agent_info_1, agent_info_2])
+                        game_details.append([agent_names[0], agent_names[1], info['result'], winner, total_time, steps, agent_info_1, agent_info_2])
 
-                    print(f"-- {game_num} / {total_games} Result: ", game_details[-1])
+                        print(f"-- {game_num} / {total_games} Result: ", game_details[-1])
 
                 ties += m_ties
                 if d == 0:
@@ -163,7 +174,8 @@ def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, AllVs
                     wins += m_loss
                     loss += m_wins
 
-                atexit.register(env.close)
+                env.close
+                del env
 
             print(f'Result from {p1_a[0]} vs {p2_a[0]}: {wins} p1, {ties} ties, {loss} p2')
             tot_wins += wins
@@ -207,5 +219,8 @@ def run_single_match(agent1, agent2, render=False, seed=None):
     record_json_dir_ = None
 
     info, steps, observations, reward = run(env, None, config, render, do_sleep, record_pngs_dir_, record_json_dir_)
-    atexit.register(env.close)
+
+    env.close
+    del env
+
     return reward

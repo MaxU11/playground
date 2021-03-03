@@ -15,6 +15,7 @@ def get_gamestate(board, bomb_info):
     pos1 = get_position(board, 10, True)
     pos2 = get_position(board, 11, True)
     b_pos = get_position(board, constants.Item.Bomb.value, False)
+    f_pos = get_position(board, constants.Item.Flames.value, False)
 
     if len(b_pos) != len(bomb_info):
         ValueError('Invalid bomb_info length!')
@@ -29,6 +30,13 @@ def get_gamestate(board, bomb_info):
             "moving_direction": bomb_info[b][3]
         }
         bombs.append(inf)
+
+    flames = []
+    for f in range(len(f_pos)):
+        inf = {
+            "position": f_pos[f]
+        }
+        flames.append(inf)
 
     gamestate = {
         "agents": [
@@ -51,7 +59,7 @@ def get_gamestate(board, bomb_info):
         "board": board,
         "board_size": len(board),
         "bombs": bombs,
-        "flames": [],
+        "flames": flames,
         "intended_actions": [0, 0],
         "items": [],
         "step_count": 1

@@ -19,7 +19,7 @@ class UcbMRLimitMCTSAgent(UcbMRMCTSAgent):
         self.discountFactor = kwargs.get('discountFactor', 0.9999)
         self.depthLimit = kwargs.get('depthLimit', 26)
         self.C = kwargs.get('C', 0.5)  # exploration weight
-        self.MRDepthLimit = kwargs('MRDepthLimit', 2)
+        self.MRDepthLimit = kwargs.get('MRDepthLimit', 2)
 
     def getActionSpace(self, game_data, agent_id, action_space):
         return self.get_valid_actions(game_data, agent_id, action_space)

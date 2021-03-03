@@ -6,7 +6,7 @@ from pommerman.NN.pommerman_neural_net import PommermanNNet
 from pommerman import constants
 
 args = {'numIters': 1000,
-        'numEps': 2,              # Number of complete self-play games to simulate during a new iteration.
+        'numEps': 100,              # Number of complete self-play games to simulate during a new iteration.
         'updateThreshold': 0.6,     # During arena playoff, new neural net will be accepted if threshold or more of games are won.
         'maxlenOfQueue': 200000,    # Number of game examples to train the neural networks.
         'arenaCompare': 40,         # Number of games to play during arena play to determine if new net will be accepted.
@@ -15,7 +15,7 @@ args = {'numIters': 1000,
         'folder': 'c:\\tmp\\Model',
         'log_file': 'train.log',
         'loss_file': 'loss.csv',
-        'load_model': True,
+        'load_model': False,
         'skip_first_play': False,
         'checkpoint_folder_file': ('c:\\tmp\\Model\\','best.pth.tar'),
         'examples_folder_file': ('c:\\tmp\\Model\\','best.pth.tar.examples'),

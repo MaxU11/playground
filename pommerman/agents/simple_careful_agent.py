@@ -12,13 +12,13 @@ from .. import constants
 from .. import utility
 
 
-class SimpleAgent(BaseAgent):
+class SimpleCarefulAgent(BaseAgent):
     """This is a baseline agent. After you can beat it, submit your agent to
     compete.
     """
 
     def __init__(self, *args, **kwargs):
-        super(SimpleAgent, self).__init__(*args, **kwargs)
+        super(SimpleCarefulAgent, self).__init__(*args, **kwargs)
 
         # Keep track of recently visited uninteresting positions so that we
         # don't keep visiting the same places.
@@ -28,20 +28,21 @@ class SimpleAgent(BaseAgent):
         self._prev_direction = None
 
     def act(self, obs, action_space):
-        def convert_bombs(bomb_map):
+        def convert_bombs(bomb_map, bomb_life):
             '''Flatten outs the bomb array'''
             ret = []
             locations = np.where(bomb_map > 0)
             for r, c in zip(locations[0], locations[1]):
                 ret.append({
                     'position': (r, c),
-                    'blast_strength': int(bomb_map[(r, c)])
+                    'blast_strength': int(bomb_map[(r, c)]),
+                    'life': int(bomb_life[(r, c)])
                 })
             return ret
 
         my_position = tuple(obs['position'])
         board = np.array(obs['board'])
-        bombs = convert_bombs(np.array(obs['bomb_blast_strength']))
+        bombs = convert_bombs(np.array(obs['bomb_blast_strength']), np.array(obs['bomb_life']))
         enemies = [constants.Item(e) for e in obs['enemies']]
         ammo = int(obs['ammo'])
         blast_strength = int(obs['blast_strength'])
@@ -54,7 +55,11 @@ class SimpleAgent(BaseAgent):
         if unsafe_directions:
             directions = self._find_safe_directions(
                 board, my_position, unsafe_directions, bombs, enemies)
-            return random.choice(directions).value
+            directions = self._filter_unsafe_directions(board, my_position, directions, bombs, True)
+            if len(directions) > 0:
+                return random.choice(directions).value
+            else:
+                return constants.Action.Stop.value
 
         # Lay pomme if we are adjacent to an enemy.
         if self._is_adjacent_enemy(items, dist, enemies) and self._maybe_bomb(
@@ -66,12 +71,16 @@ class SimpleAgent(BaseAgent):
         if direction is not None and (self._prev_direction != direction or
                                       random.random() < .5):
             self._prev_direction = direction
-            return direction.value
+            directions = self._filter_unsafe_directions(board, my_position, [direction, constants.Action.Stop], bombs, True)
+            if directions:
+                return directions[0].value
 
         # Move towards a good item if there is one within two reachable spaces.
         direction = self._near_good_powerup(my_position, items, dist, prev, 2)
         if direction is not None:
-            return direction.value
+            directions = self._filter_unsafe_directions(board, my_position, [direction, constants.Action.Stop], bombs, True)
+            if directions:
+                return directions[0].value
 
         # Maybe lay a bomb if we are within a space of a wooden wall.
         if self._near_wood(my_position, items, dist, prev, 1):
@@ -107,7 +116,7 @@ class SimpleAgent(BaseAgent):
         # Add this position to the recently visited uninteresting positions so we don't return immediately.
         self._recently_visited_positions.append(my_position)
         self._recently_visited_positions = self._recently_visited_positions[
-                                           -self._recently_visited_length:]
+            -self._recently_visited_length:]
 
         return random.choice(directions).value
 
@@ -136,20 +145,21 @@ class SimpleAgent(BaseAgent):
             for c in range(max(0, my_y - depth), min(len(board), my_y + depth)):
                 position = (r, c)
                 if any([
-                    out_of_range(my_position, position),
-                    utility.position_in_items(board, position, exclude),
+                        out_of_range(my_position, position),
+                        utility.position_in_items(board, position, exclude),
                 ]):
                     continue
 
                 prev[position] = None
                 item = constants.Item(board[position])
                 items[item].append(position)
-
+                
                 if position == my_position:
                     Q.put(position)
                     dist[position] = 0
                 else:
                     dist[position] = np.inf
+
 
         for bomb in bombs:
             if bomb['position'] == my_position:
@@ -172,7 +182,8 @@ class SimpleAgent(BaseAgent):
                         Q.put(new_position)
                     elif (val == dist[new_position] and random.random() < .5):
                         dist[new_position] = val
-                        prev[new_position] = position
+                        prev[new_position] = position   
+
 
         return items, dist, prev
 
@@ -193,10 +204,10 @@ class SimpleAgent(BaseAgent):
             if my_position == position:
                 # We are on a bomb. All directions are in range of bomb.
                 for direction in [
-                    constants.Action.Right,
-                    constants.Action.Left,
-                    constants.Action.Up,
-                    constants.Action.Down,
+                        constants.Action.Right,
+                        constants.Action.Left,
+                        constants.Action.Up,
+                        constants.Action.Down,
                 ]:
                     ret[direction] = max(ret[direction], bomb['blast_strength'])
             elif x == position[0]:
@@ -271,7 +282,7 @@ class SimpleAgent(BaseAgent):
                     my_position, direction)
                 next_x, next_y = next_position
                 if not utility.position_on_board(next_board, next_position) or \
-                        not utility.position_is_passable(next_board, next_position, enemies):
+                   not utility.position_is_passable(next_board, next_position, enemies):
                     continue
 
                 if not is_stuck_direction(next_position, bomb_range, next_board,
@@ -301,7 +312,7 @@ class SimpleAgent(BaseAgent):
 
             if utility.position_is_passable(board, position,
                                             enemies) or utility.position_is_fog(
-                board, position):
+                                                board, position):
                 safe.append(direction)
 
         if not safe:
@@ -329,6 +340,7 @@ class SimpleAgent(BaseAgent):
     @staticmethod
     def _maybe_bomb(ammo, blast_strength, items, dist, my_position):
         """Returns whether we can safely bomb right now.
+
         Decides this based on:
         1. Do we have ammo?
         2. If we laid a bomb right now, will we be stuck?
@@ -410,23 +422,24 @@ class SimpleAgent(BaseAgent):
             position = utility.get_next_position(my_position, direction)
             if utility.position_on_board(
                     board, position) and utility.position_is_passable(
-                board, position, enemies):
+                        board, position, enemies):
                 ret.append(direction)
         return ret
 
     @staticmethod
-    def _filter_unsafe_directions(board, my_position, directions, bombs):
+    def _filter_unsafe_directions(board, my_position, directions, bombs, only_immediate=False):
         ret = []
         for direction in directions:
             x, y = utility.get_next_position(my_position, direction)
             is_bad = False
             for bomb in bombs:
-                bomb_x, bomb_y = bomb['position']
-                blast_strength = bomb['blast_strength']
-                if (x == bomb_x and abs(bomb_y - y) <= blast_strength) or \
-                        (y == bomb_y and abs(bomb_x - x) <= blast_strength):
-                    is_bad = True
-                    break
+                if not only_immediate or bomb['life'] == 1:
+                    bomb_x, bomb_y = bomb['position']
+                    blast_strength = bomb['blast_strength']
+                    if (x == bomb_x and abs(bomb_y - y) <= blast_strength) or \
+                       (y == bomb_y and abs(bomb_x - x) <= blast_strength):
+                        is_bad = True
+                        break
             if not is_bad:
                 ret.append(direction)
         return ret

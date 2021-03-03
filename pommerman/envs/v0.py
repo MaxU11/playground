@@ -185,6 +185,8 @@ class Pomme(gym.Env):
     def step(self, actions):
         self._intended_actions = actions
 
+        old_board = np.copy(self._board)
+
         max_blast_strength = self._agent_view_size or 10
         result = self.model.step(
             actions,
@@ -201,6 +203,12 @@ class Pomme(gym.Env):
         obs = self.get_observations()
         reward = self._get_rewards()
         info = self._get_info(done, reward)
+
+        # evaluate action
+        if not done:
+            for agent in self._agents:
+                if 'NN' in agent.__class__.__name__:
+                    agent.evaluate_action(actions, old_board, self._board)
 
         if done:
             # Callback to let the agents know that the game has ended.
