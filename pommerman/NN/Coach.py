@@ -60,7 +60,7 @@ class Coach:
         nnet = self.initNNet()  # initialise random neural network
         for i in range(numIters):
 
-            if not self.skipFirstSelfPlay or i > 1:
+            if (not self.skipFirstSelfPlay) or i > 1:
                 iterationTrainExamples  = deque([], maxlen=self.maxlenOfQueue)
 
                 logging.info(f'nnet {nnet.id}: start execute episodes')
@@ -96,11 +96,15 @@ class Coach:
         return self.nnet
 
     def executeEpisode(self, nnet, df):
-        agent1 = NN_Agent(nnet, **self.a_kwds)
-        agent2 = NN_Agent(nnet, **self.a_kwds)
+        while True:
+            agent1 = NN_Agent(nnet, **self.a_kwds)
+            agent2 = NN_Agent(nnet, **self.a_kwds)
 
-        start_t = datetime.now()
-        reward = run_single_match(agent1, agent2)
+            try:
+                reward = run_single_match(agent1, agent2)
+                break
+            except Exception as e:
+                print(f'\n\skipped game due to error:\n{e}\n')
 
         trainExamples_p1 = agent1.trainExamples
         trainExamples_p2 = agent2.trainExamples
@@ -118,6 +122,7 @@ class Coach:
             r = max(r, -1)
             return r
 
+        max_steps = 9
         j=0
         r1 = reward[0]
         r2 = reward[1]
@@ -128,6 +133,8 @@ class Coach:
             j += 1
             trainExamples_p1[i] = (trainExamples_p1[i][0], trainExamples_p1[i][1], getReward(r1, trainExamples_p1[i][2]))
             trainExamples_p2[i] = (trainExamples_p2[i][0], trainExamples_p2[i][1], getReward(r2, trainExamples_p2[i][2]))
+            if j >= max_steps * 8:
+                break
 
         return trainExamples_p1 + trainExamples_p2
 

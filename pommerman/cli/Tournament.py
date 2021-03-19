@@ -66,12 +66,13 @@ def run(env, agent_names, config, render, do_sleep, record_pngs_dir=None, record
     return info, steps, observations, reward
 
 
-def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, AllVsAll=True, create_csv=True, get_observations=False, only_one_side=False, last_num=0, seed=None):
+def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, AllVsAll=True, create_csv=True, get_observations=False, only_one_side=False, last_num=0, seed=None, csv_dir=None):
     '''Wrapper to help start the game'''
     config = 'OneVsOne-v0'
     record_pngs_dir = None #f'C:/tmp/Results/PNGS'
     record_json_dir = None #f'C:/tmp/Results/JSON'
-    csv_dir = f'C:/tmp/Results/CSV'
+    if csv_dir == None:
+        csv_dir = f'C:/tmp/Results/CSV'
     game_state_file = None
     render_mode = 'human'
     do_sleep = False
@@ -140,8 +141,13 @@ def run_tournament(tournament_name, agent_pool1, agent_pool2, match_count, AllVs
                         if record_json_dir:
                             record_json_dir_ = f'{record_json_dir}/{tournament_name}/{agent_names[0]}_vs_{agent_names[1]}_{i+1}'
 
-                        start = time.time()
-                        info, steps, observations, reward = run(env, agent_names, config, render, do_sleep, record_pngs_dir_, record_json_dir_)
+                        while True:
+                            try:
+                                start = time.time()
+                                info, steps, observations, reward = run(env, agent_names, config, render, do_sleep, record_pngs_dir_, record_json_dir_)
+                                break
+                            except Exception as e:
+                                print(f'\n\skipped game due to error:\n{e}\n')
 
                         if match_observations:
                             match_observations.append((observations, reward))

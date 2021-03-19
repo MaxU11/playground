@@ -90,7 +90,7 @@ class EnvSimulator:
                 actions[a.agent_id] = utility.get_direction(old_pos, new_pos).value
                 if not a.can_kick and game_data.board[new_pos] == constants.Item.Bomb.value:
                     for b in game_data.bombs:
-                        if b.position == new_pos and b.moving_direction != None:
+                        if b.position == new_pos and b.moving_direction == None:
                             a.can_kick = True
                             reset = True
             elif new_bomb_life[new_pos] == constants.DEFAULT_BOMB_LIFE:
@@ -124,7 +124,7 @@ class EnvSimulator:
             if equal_noitems:
                 reset = True  # EQUAL WITHOUT ITEMS => SOMEWHERE NEW ITEMS AVAILABLE -> RESET
             else:
-                print('board unequal: {game_data.board}\n\n{new_board}\n\n{actions}')
+                print(f'board unequal: {game_data.board}\n\n{new_board}\n\n{actions}')
                 def find_actions(save_game_data, actions):
                     actions_1 = [actions[0]] if actions[0] != 0 else range(1, 6)
                     actions_2 = [actions[1]] if actions[1] != 0 else range(1, 6)
@@ -141,6 +141,8 @@ class EnvSimulator:
                 game_data, actions, eq = find_actions(save_game_data, actions)
                 print(f'found game_data: {game_data}\n\n{actions}')
                 if not game_data:
+                    game_data, actions, eq = find_actions(save_game_data, actions)
+                    game_data, actions, eq = find_actions(save_game_data, actions)
                     raise ValueError(f'should not happen anymore')
                 if not eq:
                     reset = True # EQUAL WITHOUT ITEMS => SOMEWHERE NEW ITEMS AVAILABLE -> RESET
@@ -403,7 +405,7 @@ class EnvSimulator:
             print(item, items)
         if utility.position_in_items(board, (next_x, next_y), [constants.Item.Rigid, constants.Item.Wood]):
             return
-        EnvSimulator._get_fire_positions_in_direction(board, next_x, next_y, strength - 1, x_dir, y_dir, items)
+        EnvSimulator._get_items_in_direction(board, (next_x, next_y), strength - 1, x_dir, y_dir, items)
 
     @staticmethod
     def get_game_state(game_data):

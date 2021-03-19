@@ -32,16 +32,16 @@ class NN_Agent(AbstractMCTSAgent):
         self.depthLimit = kwargs.get('depthLimit', 26)
         self.C = kwargs.get('C', 0.5) # exploration weight
         self.tempThreshold = kwargs.get('tempThreshold', 0)
+        self.useDomainKnowledge = kwargs.get('useDomainKnowledge', True)
 
         self.stopSelection = False
-        self.Qsa = {}  # stores Q values for s,a
-        self.Nsa = {}  # stores #times edge s,a was visited
-        self.Ns = {}  # stores #times board s was visited
-        self.Ps = {}  # stores initial policy (returned by neural net)
-        self.V = {} # stores the values (returned by neural net)
+        self.Qsa = {}
+        self.Nsa = {}
+        self.Ns = {}
+        self.Ps = {}
+        self.V = {}
 
-        #self.Es = {}  # stores game.getGameEnded ended for board s
-        self.Vs = {}  # stores game.getValidMoves for board s
+        self.Vs = {}
 
         self.c_board = {}
         self.trainExamples = []
@@ -106,17 +106,21 @@ class NN_Agent(AbstractMCTSAgent):
         if actions[my_id] == 5:
             items = EnvSimulator.get_bomb_items(new_board, my_pos_2, self.blast_strength)
             if op_id+10 in items:
-                reward += 0.3
+                reward += 0.5
             if constants.Item.Wood.value in items:
-                reward += 0.15
+                reward += 0.3
+        elif (my_pos_1 != my_pos_2) and (old_board[my_pos_2] == constants.Item.Kick.value or old_board[my_pos_2] == constants.Item.IncrRange.value or old_board[my_pos_2] == constants.Item.ExtraBomb.value):
+            reward += 0.3
         else:
-            if (my_pos_1 != my_pos_2):
-                if dist_2 < dist_1:
-                    reward += 0.15
-                elif dist_2 > dist_1:
-                    reward -= 0.15
-                if old_board[my_pos_2] == constants.Item.Kick.value or old_board[my_pos_2] == constants.Item.IncrRange.value or old_board[my_pos_2] == constants.Item.ExtraBomb.value:
-                    reward += 0.3
+            reward += 0.3 - (dist_2-1) * 0.06
+
+            #if (my_pos_1 != my_pos_2):
+            #    if dist_2 < dist_1:
+            #        reward += 0.15
+            #    elif dist_2 > dist_1:
+            #        reward -= 0.15
+            #    if old_board[my_pos_2] == constants.Item.Kick.value or old_board[my_pos_2] == constants.Item.IncrRange.value or old_board[my_pos_2] == constants.Item.ExtraBomb.value:
+            #        reward += 0.3
 
         for i in range(8):
             self.trainExamples[-1-i] = (self.trainExamples[-1-i][0], self.trainExamples[-1-i][1], reward)
@@ -139,11 +143,14 @@ class NN_Agent(AbstractMCTSAgent):
         s, c_board = self.get_canonical_board_str(node, node.agent_id)
 
         if s not in self.Ns: # initialize?
-            valids = self.get_valid_actions(game_data, node.agent_id)
-            self.Vs[s] = valids
-
             nn_input = self.nnet.get_nn_input(c_board)
             p, v = self.nnet.predict(nn_input)
+
+            if self.useDomainKnowledge:
+                valids = self.get_valid_actions(game_data, node.agent_id)
+                self.Vs[s] = valids
+            else:
+                self.Vs[s] = p > 1e-2
 
             valids = self.Vs[s]
             p = p * valids  # masking invalid moves
@@ -152,7 +159,6 @@ class NN_Agent(AbstractMCTSAgent):
             if sum_Ps_s > 0:
                 p /= sum_Ps_s  # renormalize
             else:
-                print("All valid moves were masked, doing a workaround. Overfitting?")
                 p = s + valids
                 p /= np.sum(p)
 
@@ -162,6 +168,8 @@ class NN_Agent(AbstractMCTSAgent):
         else:
             valids = self.Vs[s]
 
+        if self.useDomainKnowledge:
+            valids[5] = (game_data.agents[node.agent_id].ammo > 0)
         node.unseen_actions = [a for a in range(self.action_space) if valids[a]]
         return node
 

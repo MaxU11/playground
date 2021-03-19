@@ -25,7 +25,7 @@ from pommerman.agents import UcbMRMCTSAgent
 from pommerman.agents import UcbMRLimitMCTSAgent
 from pommerman.agents import NN_Agent
 
-#from pommerman.NN.pommerman_neural_net import PommermanNNet
+from pommerman.NN.pommerman_neural_net import PommermanNNet
 from pommerman import constants
 
 def run_ucb_vs_ucb():
@@ -198,23 +198,24 @@ def run_and_render_match():
     }
     agent_args = {
         'expandTreeRollout': False,
-        'maxIterations': 25,
+        'maxIterations': 30,
         'maxTime': 0.0,
         'discountFactor': 0.9999,
-        'depthLimit': 26,
-        'C': 1.0,
-        'tempThreshold': 0
+        'depthLimit': 30,
+        'C': 0,
+        'tempThreshold': 0,
+        'useDomainKnowledge': False
     }
-    #nnet1 = PommermanNNet(**nn_args)
-    #nnet1.load_checkpoint('C:/tmp/Model/analyse_1', 'nnet_6.pth.tar')
+    nnet1 = PommermanNNet(**nn_args)
+    nnet1.load_checkpoint('C:/tmp/Model/analyse_2', 'nnet_3.pth.tar')
 
     #nnet2 = PommermanNNet(**nn_args)
     #nnet2.load_checkpoint('C:/tmp/Model/analyse_1', 'nnet_6.pth.tar')
 
     #agent1 = NN_Agent(SimpleAgent(), **agent_args)
     #agent2 = NN_Agent(SimpleAgent(), **agent_args)
-    agent1 = SimpleAgent()
-    agent2 = UcbLimitMCTSAgent(**{'maxIterations': 80, 'maxTime': 0, 'depthLimit': 0})
+    agent1 = SimpleCarefulAgent()
+    agent2 = NN_Agent(nnet1, **agent_args)
     run_single_match(agent1, agent2, True)
 
 def run_simple_vs_simple2():
@@ -264,24 +265,127 @@ def run_ucb_vs_simplecareful():
     agent_pool1 = []
     agent_pool2 = []
 
-    # create agents
-    for i in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
-        agent_ucb1 = UcbMRMCTSAgent
-        kwargs = {'maxIterations': 0, 'maxTime': i, 'depthLimit': 26}
-        agent_pool1.append((f'UcbMRMCTSAgent_noDL_iter{i}', agent_ucb1, kwargs))
+    nn_args = {
+        'input_channels': 8,
+        'board_x': constants.BOARD_SIZE_ONE_VS_ONE,
+        'board_y': constants.BOARD_SIZE_ONE_VS_ONE,
 
-    agent_simple2 = SimpleCarefulAgent
-    agent_pool2.append(('SimpleCarefulAgent', agent_simple2, {}))
+        'lr': 0.001,
+        'dropout': 0.3,
+        'epochs': 10,  # 10,
+        'batch_size': 64,
+        'cuda': False,
+        'num_channels': 512
+    }
+    agent_args = {
+        'expandTreeRollout': False,
+        'maxIterations': 80,
+        'maxTime': 0.0,
+        'discountFactor': 0.9999,
+        'depthLimit': 0,
+        'C': 0.1,
+        'tempThreshold': 0,
+        'useDomainKnowledge': False
+    }
+    nnet1 = PommermanNNet(**nn_args)
+    nnet1.load_checkpoint('C:/tmp/Model/analyse_2', 'nnet_3.pth.tar')
+
+    # create agents
+    for i in [100, 120, 140]:
+        agent_ucb1 = NN_Agent
+        kwargs = agent_args.copy()
+        kwargs['nnet'] = nnet1
+        kwargs['maxIterations'] = i
+        agent_pool1.append((f'AlphaZeroAgent_noDL_iter{i}', agent_ucb1, kwargs))
+
+    agent_simple2 = SimpleAgent
+    agent_pool2.append(('SimpleAgent', agent_simple2, {}))
+    agent_pool1 = [('SimpleAgent', agent_simple2, {})]
 
     # Tournament Settings
-    tournament_name = 'TIME_UcbMRMCTSAgentvarIter_SimpleCarefulAgent_' + datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
-    match_count = 50
+    tournament_name = 'SimpleAgent_SimpleAgent_' + datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
+    match_count = 100
 
     run_tournament(tournament_name, agent_pool2, agent_pool1, match_count, only_one_side=False)
 
+def big_tournament():
+    agent_pool = []
+    agent_pool1 = []
+    agent_pool2 = []
+
+    nn_args = {
+        'input_channels': 8,
+        'board_x': constants.BOARD_SIZE_ONE_VS_ONE,
+        'board_y': constants.BOARD_SIZE_ONE_VS_ONE,
+
+        'lr': 0.001,
+        'dropout': 0.3,
+        'epochs': 10,  # 10,
+        'batch_size': 64,
+        'cuda': False,
+        'num_channels': 512
+    }
+    agent_args = {
+        'expandTreeRollout': False,
+        'maxIterations': 80,
+        'maxTime': 0.0,
+        'discountFactor': 0.9999,
+        'C': 0.1,
+        'tempThreshold': 0,
+        'useDomainKnowledge': False
+    }
+    nnet_NORS = PommermanNNet(**nn_args)
+    nnet_NORS.load_checkpoint('C:/tmp/Model/analyse_2', 'nnet_3.pth.tar')
+
+    nnet_RS = PommermanNNet(**nn_args)
+    nnet_RS.load_checkpoint('C:/tmp/Model/analyse_Reward', 'nnet_2.pth.tar')
+
+    kwargs = agent_args.copy()
+    kwargs['maxIterations'] = 60
+    kwargs['depthLimit'] = 26
+    agent_pool.append(('UCT-Agent', UcbMCTSAgent, kwargs))
+
+    kwargs = agent_args.copy()
+    kwargs['maxIterations'] = 40
+    kwargs['depthLimit'] = 26
+    agent_pool.append(('UCT-ActionPruning-Agent', UcbLimitMCTSAgent, kwargs))
+
+    kwargs = agent_args.copy()
+    kwargs['maxIterations'] = 5
+    kwargs['depthLimit'] = 26
+    agent_pool.append(('UCT-MiniMax-Agent', UcbMRLimitMCTSAgent, kwargs))
+
+    kwargs = agent_args.copy()
+    kwargs['nnet'] = nnet_NORS
+    kwargs['maxIterations'] = 40
+    agent_pool.append(('AlphaZero-Agent', NN_Agent, kwargs))
+
+    kwargs = agent_args.copy()
+    kwargs['nnet'] = nnet_RS
+    kwargs['maxIterations'] = 40
+    agent_pool.append(('AlphaZero-RewardShaping-Agent', NN_Agent, kwargs))
+
+    start_i = 0
+    game_num = 0
+    for i, a in enumerate(agent_pool):
+        for j in range(len(agent_pool)-i):
+            game_num += 1
+            if start_i <= game_num:
+                print(i, j)
+                agent_pool1.append(agent_pool[i])
+                agent_pool2.append(agent_pool[i+j])
+
+                print(agent_pool1[-1][0], 'vs', agent_pool2[-1][0])
+
+    # Tournament Settings
+    tournament_name = 'BigTournament' + datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
+    match_count = 25
+
+    run_tournament(tournament_name, agent_pool2, agent_pool1, match_count, only_one_side=False, AllVsAll=False)
 
 if __name__ == "__main__":
     #run_and_render_match()
     #run_simple_vs_simple2()
     #testSimpleAgent()
     run_ucb_vs_simplecareful()
+    #big_tournament()
